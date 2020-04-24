@@ -1,0 +1,25 @@
+{
+   "connectionProperties":[
+      {
+         "propertyGroup":"CONNECTION_PROPS",
+         "propertyName":"targetWSDLURL",
+         "propertyType":"WSDL_URL",
+         "propertyValue":"<WSDL_URL>"
+      }
+   ],
+   "securityPolicy":"USERNAME_PASSWORD_TOKEN",
+   "securityProperties":[
+      {
+         "propertyGroup":"CREDENTIALS",
+         "propertyName":"username",
+         "propertyType":"STRING",
+         "propertyValue":"<user_name>"
+      },
+      {
+         "propertyGroup":"CREDENTIALS",
+         "propertyName":"password",
+         "propertyType":"PASSWORD",
+         "propertyValue":"<user_password>"
+      }
+   ]
+}
