@@ -2,6 +2,7 @@
 **/out
 **/IAR_location
 **/log
+**/Artifacts
 ciout.html
 config.json_sav
 cdout.html
