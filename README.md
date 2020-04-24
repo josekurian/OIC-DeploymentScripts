@@ -39,13 +39,13 @@ INTEGRATION_CONFIG  |   (Optional)  Integration Config (config.json) directory
 #### _Execution_
 _Export Integrations found in the config.json file:_
 ```
-cd /c/Oracle/Code/OIC/OIC-DeploymentScripts/01_export_integrations
-bash export_integrations.sh https://oic99596029-ocuocictrng26.integration.ocp.oraclecloud.com 99596029-ora034 SuperHardPassword1234 /c/Oracle/Code/OIC/OIC-DeploymentScripts/Artifacts false /c/Oracle/Code/OIC/oic_cicd_files/01_export_integrations/config.json
+cd /c/Oracle/Code/OIC/OIC-DeploymentScripts/Scripts/01_export_integrations
+bash export_integrations.sh https://oic99596029-ocuocictrng26.integration.ocp.oraclecloud.com 99596029-ora034 SuperHardPassword1234 /c/Oracle/Code/OIC/OIC-DeploymentScripts/Artifacts false /c/Oracle/Code/OIC/OIC-DeploymentScripts/Scripts/01_export_integrations/config.json
 ```
 
 _Export All Integrations:_
 ```
-cd /c/Oracle/Code/OIC/OIC-DeploymentScripts/01_export_integrations
+cd /c/Oracle/Code/OIC/OIC-DeploymentScripts/Scripts/01_export_integrations
 bash export_integrations.sh https://oic99596029-ocuocictrng26.integration.ocp.oraclecloud.com 99596029-ora034 SuperHardPassword1234 /c/Oracle/Code/OIC/OIC-DeploymentScripts/Artifacts true
 ```
 
@@ -62,7 +62,7 @@ COMMIT_COMMENT      |   (Optional)  Commit description (i.e. "Pushing OIC Integr
 
 #### _Execution_
 ```
-cd /c/Oracle/Code/OIC/OIC-DeploymentScripts/02_push_to_repository
+cd /c/Oracle/Code/OIC/OIC-DeploymentScripts/Scripts/02_push_to_repository
 bash push_to_repository.sh /c/Users/s.castro.oropeza/AppData/Local/Programs/Git /c/Oracle/Code/OIC/OIC-DeploymentScripts/Artifacts feature/deployments-test scoropeza scoropeza@gmail.com "Pushing OIC Integrations to Remote Repo"
 ```
 
@@ -80,7 +80,7 @@ BITBUCKET_EMAIL     |   (Mandatory) Bitbucket user email
 
 #### _Execution_
 ```
-cd /c/Oracle/Code/OIC/OIC-DeploymentScripts/03_pull_from_repository
+cd /c/Oracle/Code/OIC/OIC-DeploymentScripts/Scripts/03_pull_from_repository
 bash pull_from_repository.sh /c/Users/s.castro.oropeza/AppData/Local/Programs/Git /c/Oracle/Code/OIC/Downloads https://github.com/scoropeza/OIC-DeploymentScripts.git feature/deployments-test scoropeza scoropeza@gmail.com
 ```
 
@@ -99,8 +99,8 @@ IAR_LOCATION        |   (Mandatory) IAR files location
 
 #### _Execution_
 ```
-cd /c/Oracle/Code/OIC/OIC-DeploymentScripts/04_deploy_integrations
-bash deploy_integrations.sh https://oic99596029-ocuocictrng26.integration.ocp.oraclecloud.com 99596029-ora034 SuperHardPassword1234 true false /c/Oracle/Code/OIC/oic_cicd_files/04_deploy_integrations/config/integrations.json /c/Oracle/Code/OIC/oic_cicd_files/03_pull_from_repository/IAR_location
+cd /c/Oracle/Code/OIC/OIC-DeploymentScripts/Scripts/04_deploy_integrations
+bash deploy_integrations.sh https://oic99596029-ocuocictrng26.integration.ocp.oraclecloud.com 99596029-ora034 SuperHardPassword1234 true false /c/Oracle/Code/OIC/OIC-DeploymentScripts/Scripts/04_deploy_integrations/config/integrations.json /c/Oracle/Code/OIC/OIC-DeploymentScripts/Scripts/03_pull_from_repository/IAR_location
 ```
 
 
