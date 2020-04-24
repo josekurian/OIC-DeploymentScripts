@@ -1,0 +1,13 @@
+{ "integrations":
+   [ 
+      {
+          "code":"SAMPL_INCID_DETAI_FROM_SERVI_CLO",     
+          "version":"01.00.0000",     
+          "connections": [
+              { "code":"MY_REST_ENDPOINT_INTERFAC" },
+              { "code":"SAMPLE_SERVICE_CLOUD" }
+          ]
+       
+       }
+   ]
+}

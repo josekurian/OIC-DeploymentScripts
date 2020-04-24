@@ -1,0 +1,13 @@
+{ "integrations":
+   [ 
+      {
+          "code":"COUNTRY_INFO",     
+          "version":"01.00.0000",     
+          "connections": [
+              { "code":"LOCAL_REST" },
+              { "code":"RESTCOUNTRIESEU" }
+          ]
+       
+       }
+   ]
+}
