@@ -28,9 +28,27 @@
 # that results from the download of any such material.
 #
 # ****************************************************************************************
+#jq absolute PATH
 jq=/c/Oracle/Code/OIC/jq-win64.exe
-NUM_ARG=$#
 
+#Support for different versions of the API
+INTEGRATION_CLOUD_VERSION="ICS_V1"
+if [ $INTEGRATION_CLOUD_VERSION == "ICS_V1" ]
+then
+    INTEGRATION_REST_API="/icsapis/v1/"
+elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V2" ]
+then
+    INTEGRATION_REST_API="/icsapis/v2/"
+elif [ $INTEGRATION_CLOUD_VERSION == "OIC" ]
+then
+    INTEGRATION_REST_API="/ic/api/integration/v1/"
+else
+    echo "[ERROR] Specified Invalid version of Oracle Integration Cloud. Supported values are ICS_V1 | ICS_V2 | OIC"
+    exit 1
+fi
+
+
+NUM_ARG=$#
 if [[ $NUM_ARG -lt 5 ]]
 then
 	echo "[ERROR] Missing mandatory arguments: "`basename "$0"`" <ICS_ENV> <ICS_USER> <ICS_USER_PWD> <LOCAL_REPOSITORY_LOCATION> <EXPORT_ALL> "
@@ -65,6 +83,7 @@ ARCHIVE_DIR=$CURRENT_DIR/archive
 
 VERBOSE=false
 ARCHIVE_INTEGRATION=true
+RESPONSE_FILE=$LOG_DIR/curl_response.out
 
 rec_num=0
 total_passed=0
@@ -78,24 +97,17 @@ total_rec_num=0
 #######################################
 ## Re-building OIC URL from User input
 #######################################
-
 tempstr=$ICS_ENV
 echo $tempstr
 STR1=$(echo $tempstr | cut -d'/' -f 1)
 STR2=$(echo $tempstr | cut -d'/' -f 3)
 ICS_ENV=$(echo ${STR1}\/\/${STR2})
 echo "FINAL OIC URL = $ICS_ENV"
-
 ########################################
 
-INTEGRATION_REST_API="/ic/api/integration/v1/integrations"
-
 GREP_CMD="grep -q "
-
 TYPE_REQUEST="GET"
-
 CURL_CMD="curl -k -v -X $TYPE_REQUEST -u $ICS_USER:$ICS_USER_PWD"
-
 # Make CURL command silent by default
 CURL_CMD="$CURL_CMD -s "
 
@@ -111,33 +123,33 @@ function log () {
 
 
 function log_result () {
-   operation=$1
-   integration_name=$2
-   integration_version=$3
-   check_file=$4
+    operation=$1
+    integration_name=$2
+    integration_version=$3
+    check_file=$4
 
-   # Check for HTTP return code 
-   if grep -q '200 OK' $check_file;then
-      echo "[$(date +'%Y-%m-%d %H:%M:%S')]|$operation|$integration_name|$integration_version|Passed" 2>&1 |& tee -a $RESULT_OUTPUT
-   elif grep -q '204' $4;then
-      echo "[$(date +'%Y-%m-%d %H:%M:%S')]|$1|$2|$3|Failed (204 - No content)" 2>&1 |& tee -a $RESULT_OUTPUT
-   elif grep -q '400' $4;then
-      echo "[$(date +'%Y-%m-%d %H:%M:%S')]|$1|$2|$3|Failed (400 - Bad request error)" 2>&1 |& tee -a $RESULT_OUTPUT
-   elif grep -q '401' $4;then
-      echo "[$(date +'%Y-%m-%d %H:%M:%S')]|$1|$2|$3|Failed (401 - Unauthorized)" 2>&1 |& tee -a $RESULT_OUTPUT
-   elif grep -q '404 Not Found' $4;then
-      echo "[$(date +'%Y-%m-%d %H:%M:%S')]|$1|$2|$3|Failed (404 - Not Found)" 2>&1 |& tee -a $RESULT_OUTPUT
-   elif grep -q '409' $4;then
-      echo "[$(date +'%Y-%m-%d %H:%M:%S')]|$1|$2|$3|Failed (409 - Conflict error)" 2>&1 |& tee -a $RESULT_OUTPUT
-   elif grep -q '412' $4;then
-      echo "[$(date +'%Y-%m-%d %H:%M:%S')]|$1|$2|$3|Failed (412 - Precondition failed)" 2>&1 |& tee -a $RESULT_OUTPUT
-   elif grep -q '423' $4;then
-      echo "[$(date +'%Y-%m-%d %H:%M:%S')]|$1|$2|$3|Failed (423 - Integration Locked or PREBUILT type)" 2>&1 |& tee -a $RESULT_OUTPUT
-   elif grep -q '500' $4;then
-      echo "[$(date +'%Y-%m-%d %H:%M:%S')]|$1|$2|$3|Failed (500 - Server error)" 2>&1 |& tee -a $RESULT_OUTPUT
-   else
-      echo "[$(date +'%Y-%m-%d %H:%M:%S')]|$1|$2|$3|Failed" 2>&1 |& tee -a $RESULT_OUTPUT
-fi
+    # Check for HTTP return code 
+    if grep -q '200 OK' $check_file;then
+        echo "[$(date +'%Y-%m-%d %H:%M:%S')]|$operation|$integration_name|$integration_version|Passed" 2>&1 |& tee -a $RESULT_OUTPUT
+    elif grep -q '204' $4;then
+        echo "[$(date +'%Y-%m-%d %H:%M:%S')]|$1|$2|$3|Failed (204 - No content)" 2>&1 |& tee -a $RESULT_OUTPUT
+    elif grep -q '400' $4;then
+        echo "[$(date +'%Y-%m-%d %H:%M:%S')]|$1|$2|$3|Failed (400 - Bad request error)" 2>&1 |& tee -a $RESULT_OUTPUT
+    elif grep -q '401' $4;then
+        echo "[$(date +'%Y-%m-%d %H:%M:%S')]|$1|$2|$3|Failed (401 - Unauthorized)" 2>&1 |& tee -a $RESULT_OUTPUT
+    elif grep -q '404 Not Found' $4;then
+        echo "[$(date +'%Y-%m-%d %H:%M:%S')]|$1|$2|$3|Failed (404 - Not Found)" 2>&1 |& tee -a $RESULT_OUTPUT
+    elif grep -q '409' $4;then
+        echo "[$(date +'%Y-%m-%d %H:%M:%S')]|$1|$2|$3|Failed (409 - Conflict error)" 2>&1 |& tee -a $RESULT_OUTPUT
+    elif grep -q '412' $4;then
+        echo "[$(date +'%Y-%m-%d %H:%M:%S')]|$1|$2|$3|Failed (412 - Precondition failed)" 2>&1 |& tee -a $RESULT_OUTPUT
+    elif grep -q '423' $4;then
+        echo "[$(date +'%Y-%m-%d %H:%M:%S')]|$1|$2|$3|Failed (423 - Integration Locked or PREBUILT type)" 2>&1 |& tee -a $RESULT_OUTPUT
+    elif grep -q '500' $4;then
+        echo "[$(date +'%Y-%m-%d %H:%M:%S')]|$1|$2|$3|Failed (500 - Server error)" 2>&1 |& tee -a $RESULT_OUTPUT
+    else
+        echo "[$(date +'%Y-%m-%d %H:%M:%S')]|$1|$2|$3|Failed" 2>&1 |& tee -a $RESULT_OUTPUT
+    fi
 }
 
 function ciout_to_html () {
@@ -227,6 +239,41 @@ function ciout_to_html () {
 
 }
 
+function execute_integration_cloud_api () {
+    api_operation=$1
+    if [ $INTEGRATION_CLOUD_VERSION == "ICS_V1" ] && [ $api_operation == "RETRIEVE_CONNECTION" ]
+    then
+        $CURL_CMD -HAccept:application\/json ${ICS_ENV}${INTEGRATION_REST_API}connections/$conn_id -o $connection_json 2>&1 | tee curl_output
+    elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V2" ] && [ $api_operation == "RETRIEVE_CONNECTION" ]
+    then
+        $CURL_CMD -HAccept:application\/json ${ICS_ENV}${INTEGRATION_REST_API}connections/$conn_id -o $connection_json 2>&1 | tee curl_output
+    elif [ $INTEGRATION_CLOUD_VERSION == "OIC" ] && [ $api_operation == "RETRIEVE_CONNECTION" ]
+    then
+        $CURL_CMD -HAccept:application\/json ${ICS_ENV}${INTEGRATION_REST_API}connections/$conn_id -o $connection_json 2>&1 | tee curl_output
+    elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V1" ] && [ $api_operation == "RETRIEVE_INTEGRATION" ]
+    then
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/$INTEGRATION_ID/$INTEGRATION_VERSION/ -HAccept:application\/json -o $RESPONSE_FILE 2>&1 | tee curl_output
+    elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V2" ] && [ $api_operation == "RETRIEVE_INTEGRATION" ]
+    then
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/$INTEGRATION_ID\|$INTEGRATION_VERSION/ -HAccept:application\/json -o $RESPONSE_FILE 2>&1 | tee curl_output
+    elif [ $INTEGRATION_CLOUD_VERSION == "OIC" ] && [ $api_operation == "RETRIEVE_INTEGRATION" ]
+    then
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/$INTEGRATION_ID\|$INTEGRATION_VERSION/ -HAccept:application\/json -o $RESPONSE_FILE 2>&1 | tee curl_output
+    elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V1" ] && [ $api_operation == "EXPORT_INTEGRATION" ]
+    then
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/$INTEGRATION_ID/$INTEGRATION_VERSION/export -o $IAR_FILE 2>&1 | tee curl_output
+    elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V2" ] && [ $api_operation == "EXPORT_INTEGRATION" ]
+    then
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/$INTEGRATION_ID/versions/$INTEGRATION_VERSION/archive -o $IAR_FILE 2>&1 | tee curl_output
+    elif [ $INTEGRATION_CLOUD_VERSION == "OIC" ] && [ $api_operation == "EXPORT_INTEGRATION" ]
+    then
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/$INTEGRATION_ID\|$INTEGRATION_VERSION/archive -o $IAR_FILE 2>&1 | tee curl_output
+    else
+        echo "[ERROR] Specified Invalid version of Oracle Integration Cloud. Supported values are ICS_V1 | ICS_V2 | OIC"
+        exit 1
+    fi
+}
+
 function extract_connections () {
    curl_response=$1
 
@@ -234,7 +281,21 @@ function extract_connections () {
    then
         echo "curl_response.out exists."
 
-        ${jq} '[.dependencies.connections[] | {id: .id} ]' $curl_response > connections.json
+        if [ $INTEGRATION_CLOUD_VERSION == "ICS_V1" ]
+        then
+            ${jq} '[.invokes.items[] | {id: .code} ]' $curl_response > connections_temp.json
+            ${jq} 'unique_by(.id)' connections_temp.json > connections.json
+
+        elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V2" ]
+        then
+            echo "[ERROR] Extracting connections for version ${INTEGRATION_CLOUD_VERSION} is not yet supported."
+        elif [ $INTEGRATION_CLOUD_VERSION == "OIC" ]
+        then
+            ${jq} '[.dependencies.connections[] | {id: .id} ]' $curl_response > connections.json
+        else
+            echo "[ERROR] Specified Invalid version of Oracle Integration Cloud. Supported values are ICS_V1 | ICS_V2 | OIC"
+            exit 1
+        fi
 
         num_conns=$(${jq} length connections.json)
         echo 'number of Connection: ' $num_conns
@@ -245,8 +306,8 @@ function extract_connections () {
             echo 'conn_id =' $conn_id
             connection_json=${conn_id}.json
 
-            curl -k -v -X GET -u $ICS_USER:$ICS_USER_PWD -HAccept:application/json $ICS_ENV/ic/api/integration/v1/connections/$conn_id -o $connection_json 2>&1 | tee curl_output
-
+            log "*** Running Curl command to RETRIEVE_CONNECTION: "
+            execute_integration_cloud_api "RETRIEVE_CONNECTION"
             if [ "$?" == "0" ]
             then
                 if grep -q '200 OK' "curl_output"
@@ -315,25 +376,23 @@ function exporting_integrations () {
             log "******************************************************************************************"
 
             # first, call to check if the Integration exists
-            $CURL_CMD $ICS_ENV$INTEGRATION_REST_API/$INTEGRATION_ID\|$INTEGRATION_VERSION/ -HAccept:application\/json -o $RESPONSE_FILE 2>&1 | tee curl_output
-
+            log "*** Running Curl command to RETRIEVE_INTEGRATION: "
+            execute_integration_cloud_api "RETRIEVE_INTEGRATION"
             if [ "$?" == "0" ]
             then
                 log "*** Verifying Integration  .. "
-
                 cat $RESPONSE_FILE | grep -q "\"code\":\"${INTEGRATION_ID}\""
 
                 # If Integration exists
                 if  [ "$?" == "0" ]
                 then
-                    log "*** Integration ${INTEGRATION_ID}_${INTEGRATION_VERSION}  exists  .. so exporting Integration .."
+                    log "*** Integration ${INTEGRATION_ID}_${INTEGRATION_VERSION} exists  .. so exporting Integration .."
 
                     IAR_FILE="$ARCHIVE_DIR/${INTEGRATION_ID}_${INTEGRATION_VERSION}.iar"
 
                     # Export selected Integration flow
-                    log "*** Running Curl command to EXPORT selected Integration flow:  "
-
-                    $CURL_CMD $ICS_ENV$INTEGRATION_REST_API/$INTEGRATION_ID\|$INTEGRATION_VERSION/archive -o $IAR_FILE 2>&1 | tee curl_output
+                    log "*** Running Curl command to EXPORT_INTEGRATION: "
+                    execute_integration_cloud_api "EXPORT_INTEGRATION"
                     # Check if export successful
                     if [ "$?" == "0" ]
                     then
@@ -341,7 +400,6 @@ function exporting_integrations () {
                          if grep -q '200 OK' "curl_output"
                          then
                               cat $RESPONSE_FILE | grep -q "\"code\":\"${INTEGRATION_ID}\""
-
                               # if export is successful, then copy the IAR to Local Repository
                               if  [ "$?" == "0" ]
                               then
@@ -421,7 +479,6 @@ fi
 
 if [ $ARCHIVE_INTEGRATION = true ]
    then
-     RESPONSE_FILE=$LOG_DIR/curl_response.out
      
      echo 'EXPORT_ALL = ' $EXPORT_ALL
 
@@ -504,11 +561,13 @@ if [ $ARCHIVE_INTEGRATION = true ]
           rm output.json new_json_file curl_output $LOG_DIR/curl_response.out
           rm -rf out
           rm $RESULT_OUTPUT
-          rm concated_json 
+          rm concated_json
+          echo 'cleanup'
      else
           rm curl_output $LOG_DIR/curl_response.out
           rm -rf out
           rm $RESULT_OUTPUT
-          rm connections.json conn_id.json  config.json_sav
+          rm connections.json connections_temp.json conn_id.json config.json_sav
+          echo 'cleanup'
      fi
 fi
