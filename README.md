@@ -15,11 +15,14 @@ I couldn't use the scripts as published, and had to fix a substantial amount of 
 
 ## To-Dos
 - [ ]  Add feature for endpoint's tokenization
+- [ ]  Need to make the jq path dynamic, currently it only works if installed here C:/Oracle/Code/OIC/jq-win64.exe
 - [ ]  Review and Standardize log / stdout
+- [ ]  Support for blank spaces in commit comments
 - [ ]  Improve logging, remove VERBOSE mode and add shell logger
 - [ ]  Include support for Nexus / Artifactory
 - [ ]  Add Jenkins pipeline / shared libraries code
 - [ ]  Add feature to deactivate selected integrations
+- [ ]  Add htm report for the pull_from_repository step
 
 ## How to use them
 
@@ -35,6 +38,19 @@ OIC_USER_PWD        |   (Mandatory) OIC User Password
 LOCAL_REPOSITORY    |   (Mandatory) Local Repository location (i.e. /scratch/GitHub/mytest1 )
 EXPORT_ALL          |   (Mandatory) Option for Exporting all Integrations (true/false)
 INTEGRATION_CONFIG  |   (Optional)  Integration Config (config.json) full path
+
+#### _config.json_
+
+This file contains an array of Integrations that you want to export. It can contain multiple entries.
+
+```json
+[
+  {
+    "code": "COUNTRY_INFO",
+    "version": "01.00.0000"
+  }
+]
+```
 
 #### _Execution_
 _Export Integrations found in the config.json file:_
@@ -97,7 +113,35 @@ IMPORT_ONLY			|	(Mandatory)<br>If true, it will import the integration without t
 INTEGRATION_CONFIG	|	(Mandatory) Location of file integrations.json, this file contains the integrations to deploy.
 IAR_LOCATION        |   (Mandatory) IAR files location
 
+#### _config/ingtegrations.json_
+
+This file contains an array of Integrations and its associated connections. It is used by the script to determine what gets deployed.
+It can contain multiple entries.
+
+```json
+{ "integrations":
+   [ 
+      {
+          "code":"COUNTRY_INFO",     
+          "version":"01.00.0000",     
+          "connections": [
+              { "code":"LOCAL_REST" },
+              { "code":"RESTCOUNTRIESEU" }
+          ]
+       
+       }
+   ]
+}
+```
+
 #### _Execution_
+_Only Import the Integration (Connections will not be updated, and the Integration will not be activated):_
+```
+cd /c/Oracle/Code/OIC/OIC-DeploymentScripts/Scripts/04_deploy_integrations
+bash deploy_integrations.sh https://oic99596029-ocuocictrng26.integration.ocp.oraclecloud.com 99596029-ora034 SuperHardPassword1234 true true /c/Oracle/Code/OIC/OIC-DeploymentScripts/Scripts/04_deploy_integrations/config/integrations.json /c/Oracle/Code/OIC/OIC-DeploymentScripts/Scripts/03_pull_from_repository/IAR_location
+```
+
+_Import the Integrations with their Connections and Activate them:_
 ```
 cd /c/Oracle/Code/OIC/OIC-DeploymentScripts/Scripts/04_deploy_integrations
 bash deploy_integrations.sh https://oic99596029-ocuocictrng26.integration.ocp.oraclecloud.com 99596029-ora034 SuperHardPassword1234 true false /c/Oracle/Code/OIC/OIC-DeploymentScripts/Scripts/04_deploy_integrations/config/integrations.json /c/Oracle/Code/OIC/OIC-DeploymentScripts/Scripts/03_pull_from_repository/IAR_location
