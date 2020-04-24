@@ -1,8 +1,0 @@
-{
-  "adminEmail": "admin@oracle.com",
-  "agentRequired": false,
-  "agentSupported": false,
-  "id": "LOCAL_REST",
-  "role": "SOURCE",
-  "securityPolicy": "BASIC_AUTH"
-}

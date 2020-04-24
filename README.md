@@ -14,6 +14,8 @@ I couldn't use the scripts as published, and had to fix a substantial amount of 
 1. The scripts and local git repository paths must not have blank spaces (Otherwise jq does not work)
 
 ## To-Dos
+- [ ]  Support for Integration Cloud versions OIC, ICS_V1 **(IN-PROGRESS)**
+- [ ]  Support for ICS_v2
 - [ ]  Add feature for endpoint's tokenization
 - [ ]  Need to make the jq path dynamic, currently it only works if installed here C:/Oracle/Code/OIC/jq-win64.exe
 - [ ]  Review and Standardize log / stdout
@@ -23,6 +25,18 @@ I couldn't use the scripts as published, and had to fix a substantial amount of 
 - [ ]  Add Jenkins pipeline / shared libraries code
 - [ ]  Add feature to deactivate selected integrations
 - [ ]  Add htm report for the pull_from_repository step
+
+## Supported OIC Versions
+
+OIC (Oracle Integration Cloud) 
+Use: INTEGRATION_CLOUD_VERSION="OIC"
+
+ICS (Oracle Integration Cloud Service V1)
+Use: INTEGRATION_CLOUD_VERSION="ICS_V1"
+
+ICS (Oracle Integration Cloud Service V2)
+Use: INTEGRATION_CLOUD_VERSION="ICS_V2"
+
 
 ## How to use them
 
