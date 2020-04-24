@@ -34,7 +34,7 @@ OIC_USER            |   (Mandatory) OIC User
 OIC_USER_PWD        |   (Mandatory) OIC User Password
 LOCAL_REPOSITORY    |   (Mandatory) Local Repository location (i.e. /scratch/GitHub/mytest1 )
 EXPORT_ALL          |   (Mandatory) Option for Exporting all Integrations (true/false)
-INTEGRATION_CONFIG  |   (Optional)  Integration Config (config.json) directory
+INTEGRATION_CONFIG  |   (Optional)  Integration Config (config.json) full path
 
 #### _Execution_
 _Export Integrations found in the config.json file:_
