@@ -113,7 +113,7 @@ IMPORT_ONLY			|	(Mandatory)<br>If true, it will import the integration without t
 INTEGRATION_CONFIG	|	(Mandatory) Location of file integrations.json, this file contains the integrations to deploy.
 IAR_LOCATION        |   (Mandatory) IAR files location
 
-#### _config/ingtegrations.json_
+#### _config/integrations.json_
 
 This file contains an array of Integrations and its associated connections. It is used by the script to determine what gets deployed.
 It can contain multiple entries.
