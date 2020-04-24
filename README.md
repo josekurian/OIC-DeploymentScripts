@@ -61,8 +61,10 @@ BITBUCKET_EMAIL     |   (Mandatory) Bitbucket/GitHub user email
 COMMIT_COMMENT      |   (Optional)  Commit description (i.e. "Pushing OIC Integrations to Remote Repo")
 
 #### _Execution_
+```
 cd /c/Oracle/Code/OIC/OIC-DeploymentScripts/02_push_to_repository
 bash push_to_repository.sh /c/Users/s.castro.oropeza/AppData/Local/Programs/Git /c/Oracle/Code/OIC/OIC-DeploymentScripts/Artifacts feature/deployments-test scoropeza scoropeza@gmail.com "Pushing OIC Integrations to Remote Repo"
+```
 
 ### Pull from Repository:
 
@@ -91,9 +93,7 @@ OIC_ENV             |   (Mandatory) OIC URL
 OIC_USER            |   (Mandatory) OIC User
 OIC_PASSWORD        |   (Mandatory) OIC User Password
 OVERWRITE           |   (Mandatory)  Overwrite flag - If true, it will overwrite Integration if it already exists
-IMPORT_ONLY			|	(Mandatory)  
-                    |   * If true, it will import the integration without the connections and will leave it deactivated. 
-                    |   * If false, it will import both the integration and the connections and leave it activated.
+IMPORT_ONLY			|	(Mandatory)<br>If true, it will import the integration without the connections and will leave it deactivated.<br>If false, it will import both the integration and the connections and leave it activated.
 INTEGRATION_CONFIG	|	(Mandatory) Location of file integrations.json, this file contains the integrations to deploy.
 IAR_LOCATION        |   (Mandatory) IAR files location
 
