@@ -4,6 +4,6 @@
 **/log
 **/Artifacts
 ciout.html
-config.json_sav
+config.json.previous
 cdout.html
 pushout.html

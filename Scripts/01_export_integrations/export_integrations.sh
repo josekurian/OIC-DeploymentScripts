@@ -12,10 +12,9 @@
 # - OIC_ENV                : OIC URL (i.e.  https://<host_name>.us.oracle.com:7004)
 # - OIC_USER               : OIC User
 # - OIC_USER_PWD           : OIC User Password
-# - LOCAL_REPOSITORY       : Local Repository location (i.e.  /scratch/GitHub/mytest1 )
+# - LOCAL_REPO             : Local Repository location (i.e.  /scratch/GitHub/mytest1 )
 # - EXPORT_ALL             : Option for Exporting all Integrations (true/flase)
-# - INTEGRATION_CONFIG     : Integration Config (config.json) directory  (NOT USED) 
-# 
+# - CONFIG_JSON            : Integration Config (config.json) absolute path
 #
 # Disclaimer:
 #
@@ -28,89 +27,60 @@
 # that results from the download of any such material.
 #
 # ****************************************************************************************
-#jq absolute PATH
+
+#######################################################################################
+# ARGUMENTS AND SETUP SECTION
+#######################################################################################
+## jq Absolute Path
 jq=/c/Oracle/Code/OIC/jq-win64.exe
 
-#Support for different versions of the API
-INTEGRATION_CLOUD_VERSION="ICS_V1"
+##Verbose Mode flag
+VERBOSE=false
+
+##Support for different versions of the Oracle Integration APIs
+##Currently added support for OIC_V1, ICS_V1 and ICS_V2
+INTEGRATION_CLOUD_VERSION="ICS_V1" #Default Version
 if [ $INTEGRATION_CLOUD_VERSION == "ICS_V1" ]
 then
     INTEGRATION_REST_API="/icsapis/v1/"
 elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V2" ]
 then
     INTEGRATION_REST_API="/icsapis/v2/"
-elif [ $INTEGRATION_CLOUD_VERSION == "OIC" ]
+elif [ $INTEGRATION_CLOUD_VERSION == "OIC_V1" ]
 then
     INTEGRATION_REST_API="/ic/api/integration/v1/"
 else
-    echo "[ERROR] Specified Invalid version of Oracle Integration Cloud. Supported values are ICS_V1 | ICS_V2 | OIC"
+    echo "[ERROR] Specified Invalid version of Oracle Integration Cloud. Supported values are ICS_V1 | ICS_V2 | OIC_V1"
     exit 1
 fi
 
-
+##Arguments validation
 NUM_ARG=$#
 if [[ $NUM_ARG -lt 5 ]]
 then
-	echo "[ERROR] Missing mandatory arguments: "`basename "$0"`" <ICS_ENV> <ICS_USER> <ICS_USER_PWD> <LOCAL_REPOSITORY_LOCATION> <EXPORT_ALL> "
+	echo "[ERROR] Missing mandatory arguments: "`basename "$0"`" <ICS_ENV> <ICS_USER> <ICS_USER_PWD> <LOCAL_REPO> <EXPORT_ALL> <CONFIG_JSON>"
 	exit 1
 fi
 
+##Default variables
 CURRENT_DIR=`dirname $0`
-
-CONFIG_DIR=$CURRENT_DIR
+ARCHIVE_DIR=$CURRENT_DIR/archive
 LOG_DIR=$CURRENT_DIR/out
+CONFIG_FILE=$CURRENT_DIR/config.json
 ERROR_FILE=$LOG_DIR/archive_error.log
-CONFIG_FILE=$CONFIG_DIR/config.json
-
+RESPONSE_FILE=$LOG_DIR/curl_response.out
 RESULT_OUTPUT=export_integrations.out
 CI_REPORT=$CURRENT_DIR/ciout.html
+total_passed=0
+total_failed=0
 
+##Default values for arguments
 ICS_ENV=${1}
 ICS_USER=${2}
 ICS_USER_PWD=${3}
 LOCAL_REPO=${4}
 EXPORT_ALL=${5:-true}
-JSON_file=${6:-$CONFIG_FILE}
-
-echo "ICS_EN: $ICS_ENV"
-echo "ICS_USER:  $ICS_USER"
-echo "ICS_USER_PWD: ********"
-echo "LOCAL_REPO: $LOCAL_REPO"
-echo "CONFIG_FILE: $JSON_file"
-
-
-ARCHIVE_DIR=$CURRENT_DIR/archive
-
-VERBOSE=false
-ARCHIVE_INTEGRATION=true
-RESPONSE_FILE=$LOG_DIR/curl_response.out
-
-rec_num=0
-total_passed=0
-total_failed=0
-
-limit=100
-offset=0
-current_rec_num=0
-total_rec_num=0
-
-#######################################
-## Re-building OIC URL from User input
-#######################################
-tempstr=$ICS_ENV
-echo $tempstr
-STR1=$(echo $tempstr | cut -d'/' -f 1)
-STR2=$(echo $tempstr | cut -d'/' -f 3)
-ICS_ENV=$(echo ${STR1}\/\/${STR2})
-echo "FINAL OIC URL = $ICS_ENV"
-########################################
-
-GREP_CMD="grep -q "
-TYPE_REQUEST="GET"
-CURL_CMD="curl -k -v -X $TYPE_REQUEST -u $ICS_USER:$ICS_USER_PWD"
-# Make CURL command silent by default
-CURL_CMD="$CURL_CMD -s "
-
+CONFIG_JSON=${6:-$CONFIG_FILE}
 
 #######################################################################################
 # DEFINED FUNCTIONS
@@ -120,7 +90,6 @@ function log () {
    message=$1
     echo "[$(date +'%Y-%m-%d %H:%M:%S')] $message" 
 }
-
 
 function log_result () {
     operation=$1
@@ -158,10 +127,6 @@ function ciout_to_html () {
     total_num=$2
     pass=$3
     failed=$4
-
-    echo "total integrations: $total_num"
-    echo "pass: $pass"
-    echo "failed: $failed"
 
     echo "<html>" >> $html
     echo "  <style>
@@ -219,7 +184,6 @@ function ciout_to_html () {
     while IFS='|' read -ra line ; do
         echo "<tr>" >> $html
         for i in "${line[@]}"; do
-           echo "<td>$i</td>"
            if echo $i| grep -iqF Pass; then
                 echo " <td><font color="blue">$i</font></td>" >> $html
            elif echo $i | grep -iqF Fail; then
@@ -228,46 +192,118 @@ function ciout_to_html () {
                 echo " <td>$i</td>" >> $html
            fi
           done
-         echo "</tr>"
          echo "</tr>" >> $html
     done < $input_file
 
     echo "</table>" >> $html
-
     echo "</body>" >> $html
     echo "</html>" >> $html
 
 }
 
 function execute_integration_cloud_api () {
+    TYPE_REQUEST="GET" #GET, PIT, POST
+    CURL_CMD="curl -k -v -X $TYPE_REQUEST -u $ICS_USER:$ICS_USER_PWD"
+    CURL_CMD="${CURL_CMD} -s " # Make CURL command silent by default
     api_operation=$1
     if [ $INTEGRATION_CLOUD_VERSION == "ICS_V1" ] && [ $api_operation == "RETRIEVE_CONNECTION" ]
     then
+        TYPE_REQUEST="GET"
         $CURL_CMD -HAccept:application\/json ${ICS_ENV}${INTEGRATION_REST_API}connections/$conn_id -o $connection_json 2>&1 | tee curl_output
     elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V2" ] && [ $api_operation == "RETRIEVE_CONNECTION" ]
     then
+        TYPE_REQUEST="GET"
         $CURL_CMD -HAccept:application\/json ${ICS_ENV}${INTEGRATION_REST_API}connections/$conn_id -o $connection_json 2>&1 | tee curl_output
-    elif [ $INTEGRATION_CLOUD_VERSION == "OIC" ] && [ $api_operation == "RETRIEVE_CONNECTION" ]
+    elif [ $INTEGRATION_CLOUD_VERSION == "OIC_V1" ] && [ $api_operation == "RETRIEVE_CONNECTION" ]
     then
+        TYPE_REQUEST="GET"
         $CURL_CMD -HAccept:application\/json ${ICS_ENV}${INTEGRATION_REST_API}connections/$conn_id -o $connection_json 2>&1 | tee curl_output
     elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V1" ] && [ $api_operation == "RETRIEVE_INTEGRATION" ]
     then
+        TYPE_REQUEST="GET"
         $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/$INTEGRATION_ID/$INTEGRATION_VERSION/ -HAccept:application\/json -o $RESPONSE_FILE 2>&1 | tee curl_output
     elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V2" ] && [ $api_operation == "RETRIEVE_INTEGRATION" ]
     then
+        TYPE_REQUEST="GET"
         $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/$INTEGRATION_ID\|$INTEGRATION_VERSION/ -HAccept:application\/json -o $RESPONSE_FILE 2>&1 | tee curl_output
-    elif [ $INTEGRATION_CLOUD_VERSION == "OIC" ] && [ $api_operation == "RETRIEVE_INTEGRATION" ]
+    elif [ $INTEGRATION_CLOUD_VERSION == "OIC_V1" ] && [ $api_operation == "RETRIEVE_INTEGRATION" ]
     then
+        TYPE_REQUEST="GET"
         $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/$INTEGRATION_ID\|$INTEGRATION_VERSION/ -HAccept:application\/json -o $RESPONSE_FILE 2>&1 | tee curl_output
+    elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V1" ] && [ $api_operation == "RETRIEVE_ALL_INTEGRATIONS" ]
+    then
+        TYPE_REQUEST="GET"
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations -HAccept:application\/json -o $RESPONSE_FILE 2>&1 | tee curl_output
+    elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V2" ] && [ $api_operation == "RETRIEVE_ALL_INTEGRATIONS" ]
+    then
+        TYPE_REQUEST="GET"
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations -HAccept:application\/json -o $RESPONSE_FILE 2>&1 | tee curl_output
+    elif [ $INTEGRATION_CLOUD_VERSION == "OIC_V1" ] && [ $api_operation == "RETRIEVE_ALL_INTEGRATIONS" ]
+    then
+        TYPE_REQUEST="GET"
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations -HAccept:application\/json -o $RESPONSE_FILE 2>&1 | tee curl_output
     elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V1" ] && [ $api_operation == "EXPORT_INTEGRATION" ]
     then
+        TYPE_REQUEST="GET"
         $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/$INTEGRATION_ID/$INTEGRATION_VERSION/export -o $IAR_FILE 2>&1 | tee curl_output
     elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V2" ] && [ $api_operation == "EXPORT_INTEGRATION" ]
     then
+        TYPE_REQUEST="GET"
         $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/$INTEGRATION_ID/versions/$INTEGRATION_VERSION/archive -o $IAR_FILE 2>&1 | tee curl_output
-    elif [ $INTEGRATION_CLOUD_VERSION == "OIC" ] && [ $api_operation == "EXPORT_INTEGRATION" ]
+    elif [ $INTEGRATION_CLOUD_VERSION == "OIC_V1" ] && [ $api_operation == "EXPORT_INTEGRATION" ]
     then
+        TYPE_REQUEST="GET"
         $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/$INTEGRATION_ID\|$INTEGRATION_VERSION/archive -o $IAR_FILE 2>&1 | tee curl_output
+    elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V1" ] && [ $api_operation == "DEACTIVATE_INTEGRATION" ]
+    then
+        TYPE_REQUEST="POST"
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/$INTEGRATION_ID/$INTEGRATION_VERSION/deactivate -H Content-Type:application\/json
+    elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V2" ] && [ $api_operation == "DEACTIVATE_INTEGRATION" ]
+    then
+        TYPE_REQUEST="POST"
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/$INTEGRATION_ID/versions/$INTEGRATION_VERSION/status -H Content-Type:application\/json -H X-HTTP-Method-Override:PATCH -d '{"status":"CONFIGURED"}'
+    elif [ $INTEGRATION_CLOUD_VERSION == "OIC_V1" ] && [ $api_operation == "DEACTIVATE_INTEGRATION" ]
+    then
+        TYPE_REQUEST="POST"
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/$INTEGRATION_ID\|$INTEGRATION_VERSION -H Content-Type:application\/json -H X-HTTP-Method-Override:PATCH -d '{"status":"CONFIGURED"}'
+    elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V1" ] && [ $api_operation == "ACTIVATE_INTEGRATION" ]
+    then
+        TYPE_REQUEST="POST"
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/$INTEGRATION_ID/$INTEGRATION_VERSION/activate -H Content-Type:application\/json
+    elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V2" ] && [ $api_operation == "ACTIVATE_INTEGRATION" ]
+    then
+        TYPE_REQUEST="POST"
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/$INTEGRATION_ID/versions/$INTEGRATION_VERSION/status -H Content-Type:application\/json -H X-HTTP-Method-Override:PATCH -d '{"status":"ACTIVATED"}'
+        
+    elif [ $INTEGRATION_CLOUD_VERSION == "OIC_V1" ] && [ $api_operation == "ACTIVATE_INTEGRATION" ]
+    then
+        TYPE_REQUEST="POST"
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/$INTEGRATION_ID\|$INTEGRATION_VERSION -H Content-Type:application\/json -H X-HTTP-Method-Override:PATCH -d '{"status":"ACTIVATED"}'
+        
+    elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V1" ] && [ $api_operation == "IMPORT_NEW_INTEGRATION" ]
+    then
+        TYPE_REQUEST="POST"
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/import -H Accept:application/json -F type=application/octet-stream -F file=@$IAR_LOC/$IntegrationIAR 2>&1 | tee curl_output
+    elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V2" ] && [ $api_operation == "IMPORT_NEW_INTEGRATION" ]
+    then
+        TYPE_REQUEST="POST"
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/archive -H Accept:application/json -F type=application/octet-stream -F file=@$IAR_LOC/$IntegrationIAR 2>&1 | tee curl_output
+    elif [ $INTEGRATION_CLOUD_VERSION == "OIC_V1" ] && [ $api_operation == "IMPORT_NEW_INTEGRATION" ]
+    then
+        TYPE_REQUEST="POST"
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/archive -H Accept:application/json -F type=application/octet-stream -F file=@$IAR_LOC/$IntegrationIAR 2>&1 | tee curl_output
+    elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V1" ] && [ $api_operation == "IMPORT_EXISTING_INTEGRATION" ]
+    then
+        TYPE_REQUEST="PUT"
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/import -H Accept:application/json -F type=application/octet-stream -F file=@$IAR_LOC/$IntegrationIAR 2>&1 | tee curl_output
+    elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V2" ] && [ $api_operation == "IMPORT_EXISTING_INTEGRATION" ]
+    then
+        TYPE_REQUEST="PUT"
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/archive -H Accept:application/json -F type=application/octet-stream -F file=@$IAR_LOC/$IntegrationIAR 2>&1 | tee curl_output
+    elif [ $INTEGRATION_CLOUD_VERSION == "OIC_V1" ] && [ $api_operation == "IMPORT_EXISTING_INTEGRATION" ]
+    then
+        TYPE_REQUEST="PUT"
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/archive -HAccept:application/json -Ftype=application/octet-stream -Ffile=@$IAR_LOC/$IntegrationIAR 2>&1 | tee curl_output
     else
         echo "[ERROR] Specified Invalid version of Oracle Integration Cloud. Supported values are ICS_V1 | ICS_V2 | OIC"
         exit 1
@@ -276,34 +312,38 @@ function execute_integration_cloud_api () {
 
 function extract_connections () {
    curl_response=$1
-
    if [ -f $curl_response ]
    then
-        echo "curl_response.out exists."
-
         if [ $INTEGRATION_CLOUD_VERSION == "ICS_V1" ]
         then
-            ${jq} '[.invokes.items[] | {id: .code} ]' $curl_response > connections_temp.json
-            ${jq} 'unique_by(.id)' connections_temp.json > connections.json
-
+            #Multiple connections
+            log "*** Attempting to extract connections..."
+            ${jq} '[.invokes | { id: .items[].code } ]' $curl_response > connections_temp.json
+            if [ "$?" == "0" ]
+            then
+                ${jq} 'unique_by(.id)' connections_temp.json > connections.json
+            else
+                #Single connection
+                log "*** [WARNING] It seems there is only a single connection configured for this Integration..."
+                ${jq} '[.invokes | { id: .items.code } ]' $curl_response > connections_temp.json
+                cat connections_temp.json > connections.json
+            fi
         elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V2" ]
         then
-            echo "[ERROR] Extracting connections for version ${INTEGRATION_CLOUD_VERSION} is not yet supported."
-        elif [ $INTEGRATION_CLOUD_VERSION == "OIC" ]
+            log "[ERROR] Extracting connections for version ${INTEGRATION_CLOUD_VERSION} is not yet supported."
+        elif [ $INTEGRATION_CLOUD_VERSION == "OIC_V1" ]
         then
             ${jq} '[.dependencies.connections[] | {id: .id} ]' $curl_response > connections.json
         else
-            echo "[ERROR] Specified Invalid version of Oracle Integration Cloud. Supported values are ICS_V1 | ICS_V2 | OIC"
+            log "[ERROR] Specified Invalid version of Oracle Integration Cloud. Supported values are ICS_V1 | ICS_V2 | OIC"
             exit 1
         fi
-
         num_conns=$(${jq} length connections.json)
-        echo 'number of Connection: ' $num_conns
-
+        log "*** Number of Connections:  $num_conns"
         for ((ct=0; ct<=$num_conns-1; ct++))
         do
             conn_id=$(${jq} -r '.['$ct']|.id' connections.json)
-            echo 'conn_id =' $conn_id
+            log "*** Connection id = $conn_id"
             connection_json=${conn_id}.json
 
             log "*** Running Curl command to RETRIEVE_CONNECTION: "
@@ -334,64 +374,55 @@ function extract_connections () {
                              .connectionProperties[]?.acceptableKeys )' conn_id.json | tee $connection_json
 
                      #Check if the Connection json file is empty
-                     #if [ -s "$connection_json" ]
                      if [ -f "$connection_json" ]
                      then
-                          echo "copying $connection_json file to local repository .. " 
+                          log "*** Copying $connection_json file to local repository.." 
                           cp $connection_json $LOCAL_REPO
-                          echo "copying $connection_json file to Archive directory $ARCHIVE_DIR .. " 
+                          log "*** Copying $connection_json file to the archive directory $ARCHIVE_DIR..." 
                           cp $connection_json $ARCHIVE_DIR
                           rm $connection_json
                      else 
-                          echo " ###### Removing $connection_json since it's empty .. !!"
+                          log "*** Removing $connection_json since it's empty..."
                           rm $connection_json
                      fi
                 fi
             else
-                 log "######## Failed to export Connection artifact for $connection_json !! "
+                 log "[ERROR] Failed to export Connection artifact for $connection_json"
             fi
          done
    else
-        echo "Pre-condition failed.  Expected file does not exist!"
+        log "[ERROR] Pre-condition failed.  Expected file does not exist!"
    fi
 }
 
 function exporting_integrations () {
     rec_num=$1
-    JSON_file=$2
-
+    CONFIG_JSON=$2
      for (( i=0; i < $rec_num; i++))
      do
-            log " ~~~~ JSON file =  $JSON_file"
-
             # Extract Integration information from JSON file
-            INTEGRATION_ID=$(${jq} -r '.['$i'] | .code' $JSON_file)
-            INTEGRATION_VERSION=$(${jq} -r '.['$i'] | .version' $JSON_file)
-
+            INTEGRATION_ID=$(${jq} -r '.['$i'] | .code' $CONFIG_JSON)
+            INTEGRATION_VERSION=$(${jq} -r '.['$i'] | .version' $CONFIG_JSON)
+            log "******************************************************************************************"
             log "INTEGRATION ID:    $INTEGRATION_ID"
             log "INTEGRATION VER:   $INTEGRATION_VERSION"
-
             log "******************************************************************************************"
             log "Check if Integration Exists"
             log "******************************************************************************************"
-
             # first, call to check if the Integration exists
-            log "*** Running Curl command to RETRIEVE_INTEGRATION: "
+            log "*** Running Curl command to RETRIEVE_INTEGRATION..."
             execute_integration_cloud_api "RETRIEVE_INTEGRATION"
             if [ "$?" == "0" ]
             then
-                log "*** Verifying Integration  .. "
+                log "*** Verifying Integration..."
                 cat $RESPONSE_FILE | grep -q "\"code\":\"${INTEGRATION_ID}\""
-
                 # If Integration exists
                 if  [ "$?" == "0" ]
                 then
-                    log "*** Integration ${INTEGRATION_ID}_${INTEGRATION_VERSION} exists  .. so exporting Integration .."
-
+                    log "*** Exporting Integration ${INTEGRATION_ID}_${INTEGRATION_VERSION}..."
                     IAR_FILE="$ARCHIVE_DIR/${INTEGRATION_ID}_${INTEGRATION_VERSION}.iar"
-
                     # Export selected Integration flow
-                    log "*** Running Curl command to EXPORT_INTEGRATION: "
+                    log "*** Running Curl command to EXPORT_INTEGRATION..."
                     execute_integration_cloud_api "EXPORT_INTEGRATION"
                     # Check if export successful
                     if [ "$?" == "0" ]
@@ -405,10 +436,9 @@ function exporting_integrations () {
                               then
                                     cp $IAR_FILE $LOCAL_REPO
                                     total_passed=$((total_passed+1))
-
                                     # Export Connections
+                                    log "*** Exporting connections of Integration ${INTEGRATION_ID}_${INTEGRATION_VERSION}..."
                                     extract_connections $RESPONSE_FILE
-
                                else
                                     total_failed=$((total_failed+1))
                                fi
@@ -420,7 +450,7 @@ function exporting_integrations () {
                     fi
                     log_result "Export Integration" ${INTEGRATION_ID} ${INTEGRATION_VERSION} "curl_output"
                 else
-                    log "+++++ Integration ${INTEGRATION_ID}_${INTEGRATION_VERSION} does NOT exists!!"
+                    log "[WARNING] Integration ${INTEGRATION_ID}_${INTEGRATION_VERSION} does NOT exist!"
                     log_result "Retrieve Integration" ${INTEGRATION_ID} ${INTEGRATION_VERSION} "curl_output"
                     total_failed=$((total_failed+1))
                 fi
@@ -428,146 +458,81 @@ function exporting_integrations () {
      done
 }
 
-
-###############################################
-#    MAIN
-###############################################
+#######################################################################################
+# MAIN SECTION
+#######################################################################################
 
 if [ $VERBOSE = true ]
  then
      echo "********************************" 
      echo "***  VERBOSE mode activated  ***" 
      echo "********************************" 
-     echo ""
-     echo ""
      set -vx
 fi
 
 echo "******************************************************************************************" 
 echo "* Parameters:                                                                            *" 
 echo "******************************************************************************************"
-echo "ICS_ENV:                $ICS_ENV" 
-echo "ICS_USER:               $ICS_USER" 
-echo "ICS_USER_PWD:           ************" 
-echo "SRC_DIR:                $ARCHIVE_DIR" 
-echo "CONFIG_DIR:             $CONFIG_DIR" 
+echo "ICS_ENV:              $ICS_ENV" 
+echo "ICS_USER:             $ICS_USER" 
+echo "ICS_USER_PWD:         ************" 
+echo "LOCAL_REPO:           $LOCAL_REPO"
+echo "EXPORT_ALL:           $EXPORT_ALL"
+echo "CONFIG_JSON:          $CONFIG_JSON"
 echo "******************************************************************************************" 
 
-if [ ! -d "$LOG_DIR" ]
-then
-    echo "$LOG_DIR not exists ..  creating $LOG_DIR .."
-    mkdir -p $LOG_DIR
-fi
-
-if [ -f "$RESULT_OUTPUT" ]
-then
-    echo "$RESULT_OUTPUT file exists .. cleaning up .."
-    rm $RESULT_OUTPUT
-fi
-
-rm -f $LOG_DIR/*
+##Cleanup
+#log "Cleaning results output from last execution..."
+rm $RESULT_OUTPUT
+log "Cleaning HTML report from last execution..."
+rm $CI_REPORT
+log "Cleaning log and archive directories..."
+rm -Rf $LOG_DIR
+mkdir -p $LOG_DIR
 touch $ERROR_FILE
-
+rm -Rf $ARCHIVE_DIR
 mkdir -p $ARCHIVE_DIR
-rm -f $ARCHIVE_DIR/*
 
-if [ -f "$CI_REPORT" ]
+if [ $EXPORT_ALL = true ] 
 then
-   echo "removing old Report HTML file .."
-   rm $CI_REPORT
+    log "Exporting All Integrations..."
+    # Call API to Retrieve integrations and re-constructing new config.json file
+    execute_integration_cloud_api "RETRIEVE_ALL_INTEGRATIONS"
+    # This works across all versions of the REST APIs
+    ${jq} '[.items[] | {code: .code, version: .version}]' $RESPONSE_FILE > new_json_file
+    # Check if config.json exists and size > 0
+    if [ -s $CONFIG_JSON ]; then 
+        log "Backing up existing config.json file..."
+        cp $CONFIG_JSON ${CONFIG_JSON}.previous
+    fi
+    cp new_json_file $CONFIG_JSON
+    rm new_json_file
+else
+    log "Exporting Integrations from config.json file..."
+    if [ -s $CONFIG_JSON ]; then
+        log "config.json file:  $CONFIG_JSON"
+    else
+        log  "[ERROR] Configuration file ${CONFIG_JSON} does not exists!"
+        exit 1
+    fi
 fi
 
-if [ $ARCHIVE_INTEGRATION = true ]
-   then
-     
-     echo 'EXPORT_ALL = ' $EXPORT_ALL
+##Call to import integrations
+rec_num=$(${jq} length $CONFIG_JSON)
+log "Number of Integrations to export (specified in config.json): $rec_num"
+log "Exporting Integrations..."
+exporting_integrations $rec_num $CONFIG_JSON
 
-     if [ $EXPORT_ALL = true ] 
-        then
-         # Call API to Retrieve integrations and re-constructing new config.json file
-         echo 'Curl command' $CURL_CMD $ICS_ENV$INTEGRATION_REST_API
-         $CURL_CMD $ICS_ENV$INTEGRATION_REST_API > output.json          
-         ${jq} '[.items[] | {code: .code, version: .version}]' output.json > new_json_file
+##Converting output to HTML format
+log "Generating HTML report..."
+ciout_to_html $RESULT_OUTPUT $rec_num $total_passed $total_failed
 
-         # Check if config.json exists and size > 0
-         if [ -s $JSON_file ]; then 
-            log "config.json exists .. backup current config.json file .."
-            cp $JSON_file ${JSON_file}_sav
-         fi
+log "Total Integrations:    $rec_num"
+log "Total Passed:          $total_passed"
+log "Total Failed:          $total_failed"
 
-         #cp new_json_file $CONFIG_DIR/config.json 
-         cp new_json_file $JSON_file 
-        
-         #get the total number of Integrations to be exported
-         total_rec_num=$(${jq} '.totalResults' output.json)
-         log "*** Total number of all Integrations: $total_rec_num"
-
-         #get the total number of Integrations in this Retrieve 
-         rec_num=$(${jq} length $JSON_file)
-         log "*** number of all items: $rec_num"
-
-         rec_remaining=$(($total_rec_num - $rec_num))
-         echo 'Rec Remaining = ' $rec_remaining
-
-         offset=$(($offset+$rec_num))
-
-         # limit is the max number of Integrations that Retrieve will return per call
-         while [ $rec_remaining -gt 0 ]
-         do
-            $CURL_CMD$ICS_ENV$INTEGRATION_REST_API\?offset=$offset\&limit=$limit > output.json
-            ${jq} '[.items[] | {code: .code, version: .version}]' output.json > new_json_file
-
-            #get the Integration number from current batch
-            rec_num=$(${jq} length new_json_file)
-
-            #appending new_json_file to current config.json
-            ${jq} -s '[.[][]]' new_json_file $JSON_file > concated_json
-            cp concated_json $JSON_file
-
-            rec_remaining=$(($rec_remaining - $rec_num))
-            offset=$(($offset + $rec_num))
-         done
-
-         #Call to import integrations
-         exporting_integrations $total_rec_num $JSON_file
-
-         # Converting output to HTML format
-         ciout_to_html $RESULT_OUTPUT $total_rec_num $total_passed $total_failed
-
-         echo "Total Integrations:  $total_rec_num"
-         echo "Total Passed: $total_passed"
-         echo "Total Failed: $total_failed"
-
-     else
-         if [ -s $JSON_file ]; then
-             log "found config.json file:  $JSON_file"
-             rec_num=$(${jq} length $JSON_file)
-             log "number of user requested items: $rec_num"
-             exporting_integrations $rec_num $JSON_file
-             # Converting output to HTML format
-             ciout_to_html $RESULT_OUTPUT $rec_num $total_passed $total_failed
-             echo "Total Integrations:  $rec_num"
-             echo "Total Passed: $total_passed"
-             echo "Total Failed: $total_failed"
-         else
-              log  'ERROR:  ++++++++ Configuration file "config.json" not exists .. !! '
-              echo 'ERROR:  ++++++++ Configuration file "config.json" not exists .. !! '
-              exit 1
-         fi
-     fi
-
-     echo 'Cleaning up ..'
-     if [ $EXPORT_ALL == true ]; then
-          rm output.json new_json_file curl_output $LOG_DIR/curl_response.out
-          rm -rf out
-          rm $RESULT_OUTPUT
-          rm concated_json
-          echo 'cleanup'
-     else
-          rm curl_output $LOG_DIR/curl_response.out
-          rm -rf out
-          rm $RESULT_OUTPUT
-          rm connections.json connections_temp.json conn_id.json config.json_sav
-          echo 'cleanup'
-     fi
-fi
+log 'Cleaning up...'
+rm  curl_output $LOG_DIR/curl_response.out
+rm -rf out
+rm $RESULT_OUTPUT
+rm connections.json connections_temp.json conn_id.json
