@@ -1,0 +1,139 @@
+{
+  "connectionproperties": [
+    {
+      "displayName": "ERP Services Catalog WSDL URL",
+      "hasAttachment": "false",
+      "hidden": "false",
+      "length": "0",
+      "propertyDescription": "The service catalog service is a Fusion Application service that returns a list of external services available for integration. It allows clients to retrieve information about all public Fusion Application service endpoints available for that instance. The developer creating an Oracle ERP Cloud connection must work with the Oracle ERP Cloud service administrator to get the concrete WSDL URL for the service catalog service provisioned for the specific SaaS application. Instructions for deriving the URL for the service catalog service, which is done manually, are documented in <A href=\"https://docs.oracle.com/cloud/farel8/salescs_gs/OCGWS/pebo-services.htm#OCGWS224\" target=\"_blank\">Deriving the Business Object Service Endpoint and WSDL</A> of Getting Started with Web Services.",
+      "propertyGroup": "CONNECTION_PROPS",
+      "propertyName": "targetWSDLURL",
+      "propertyShortDesc": "The service catalog service WSDL is required to configure the adapter for both inbound and outbound endpoints using either business objects or business services.",
+      "propertyType": "WSDL_URL",
+      "required": "true"
+    },
+    {
+      "displayName": "Interface Catalog URL (optional)",
+      "hasAttachment": "false",
+      "hidden": "false",
+      "length": "0",
+      "propertyDescription": "One can also optionally specify an interface catalog URL for accessing all available REST resources. The developer creating an Oracle Sales Cloud connection must work with the Oracle Sales Cloud service administrator to get the Interface Catalog URL.  ",
+      "propertyGroup": "CONNECTION_PROPS",
+      "propertyName": "interfaceCatalogURL",
+      "propertyShortDesc": "The Interface Catalog URL is required to configure the outbound endpoint using REST business resources.",
+      "propertyType": "URL",
+      "required": "false"
+    }
+  ],
+  "securityproperties": [
+    {
+      "displayName": "Username",
+      "hasAttachment": "false",
+      "hidden": "false",
+      "length": "0",
+      "propertyDescription": "A username credential",
+      "propertyGroup": "CREDENTIALS",
+      "propertyName": "username",
+      "propertyType": "STRING",
+      "required": "true"
+    },
+    {
+      "displayName": "Password",
+      "hasAttachment": "false",
+      "hidden": "false",
+      "length": "0",
+      "propertyDescription": "A password credential",
+      "propertyGroup": "CREDENTIALS",
+      "propertyName": "password",
+      "propertyType": "PASSWORD",
+      "required": "true"
+    }
+  ],
+  "adaptertype": {
+    "appTypeConnProperties": [
+      {
+        "displayName": "ERP Services Catalog WSDL URL",
+        "hasAttachment": "false",
+        "hidden": "false",
+        "length": "0",
+        "propertyDescription": "The service catalog service is a Fusion Application service that returns a list of external services available for integration. It allows clients to retrieve information about all public Fusion Application service endpoints available for that instance. The developer creating an Oracle ERP Cloud connection must work with the Oracle ERP Cloud service administrator to get the concrete WSDL URL for the service catalog service provisioned for the specific SaaS application. Instructions for deriving the URL for the service catalog service, which is done manually, are documented in <A href=\"https://docs.oracle.com/cloud/farel8/salescs_gs/OCGWS/pebo-services.htm#OCGWS224\" target=\"_blank\">Deriving the Business Object Service Endpoint and WSDL</A> of Getting Started with Web Services.",
+        "propertyGroup": "CONNECTION_PROPS",
+        "propertyName": "targetWSDLURL",
+        "propertyShortDesc": "The service catalog service WSDL is required to configure the adapter for both inbound and outbound endpoints using either business objects or business services.",
+        "propertyType": "WSDL_URL",
+        "required": "true"
+      },
+      {
+        "displayName": "ERP Events Catalog URL (optional)",
+        "hasAttachment": "false",
+        "hidden": "false",
+        "length": "0",
+        "propertyDescription": "One can also optionally specify an event catalog URL for accessing event subscriptions. The developer creating an Oracle ERP Cloud connection must work with the Oracle ERP Cloud service administrator to get the Event Catalog URL. ",
+        "propertyGroup": "CONNECTION_PROPS",
+        "propertyName": "eventCatalogURL",
+        "propertyShortDesc": "The event catalog URL is required for configuring the inbound adapter for event subscriptions.",
+        "propertyType": "URL",
+        "required": "false"
+      },
+      {
+        "displayName": "Interface Catalog URL (optional)",
+        "hasAttachment": "false",
+        "hidden": "false",
+        "length": "0",
+        "propertyDescription": "One can also optionally specify an interface catalog URL for accessing all available REST resources. The developer creating an Oracle Sales Cloud connection must work with the Oracle Sales Cloud service administrator to get the Interface Catalog URL.  ",
+        "propertyGroup": "CONNECTION_PROPS",
+        "propertyName": "interfaceCatalogURL",
+        "propertyShortDesc": "The Interface Catalog URL is required to configure the outbound endpoint using REST business resources.",
+        "propertyType": "URL",
+        "required": "false"
+      }
+    ],
+    "appTypeCredProperties": [
+      {
+        "displayName": "Username",
+        "hasAttachment": "false",
+        "hidden": "false",
+        "length": "0",
+        "propertyDescription": "A username credential",
+        "propertyGroup": "CREDENTIALS",
+        "propertyName": "username",
+        "propertyType": "STRING",
+        "required": "true"
+      },
+      {
+        "displayName": "Password",
+        "hasAttachment": "false",
+        "hidden": "false",
+        "length": "0",
+        "propertyDescription": "A password credential",
+        "propertyGroup": "CREDENTIALS",
+        "propertyName": "password",
+        "propertyType": "PASSWORD",
+        "required": "true"
+      }
+    ],
+    "appTypeLargeIconUrl": "/images/erp/erp_92.png",
+    "appTypeMediumGrayIconUrl": "/images/erp/erp_g_46.png",
+    "appTypeMediumIconUrl": "/images/erp/erp_46.png",
+    "appTypeMediumWhiteIconUrl": "/images/erp/erp_w_46.png",
+    "appTypeName": "erp",
+    "appTypeSmallIconUrl": "/images/erp/erp_32.png",
+    "displayName": "Oracle ERP Cloud",
+    "features": "cloud.adapter.attachmentSupport, sdk.wsdl.regeneration",
+    "source": "PREINSTALLED",
+    "supportedSecurityPolicies": "Username Password Token",
+    "usage": "0",
+    "vedorInfo": {
+      "name": "Oracle Corporation",
+      "description": "https://www.oracle.com/about",
+      "contactUS": "http://www.oracle.com/us/corporate/contact/index.html",
+      "supportURL": "http://otn.oracle.com",
+      "documentationURL": "https://docs.oracle.com/cloud/latest/intcs_gs/index.html",
+      "releaseNotes": "The Oracle ERP Cloud adapter enables customers to easily integrate their on-premises or SaaS applications with Oracle ERP Cloud without having to know about the specific details involved in the integration."
+    }
+  },
+  "code": "PDHCLOUD",
+  "imageURL": "/images/erp/erp_32.png",
+  "securityPolicy": "USERNAME_PASSWORD_TOKEN",
+  "supportsCache": "true"
+}
