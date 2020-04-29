@@ -5,13 +5,14 @@
 #
 # Oracle 
 # Created by:   Richard Poon
+# Modified by: Samuel Castro
 # Created date: 5/13/2019
 # Updated date: 9/20/2019
 #
 # Mandatory parameters:
-# - OIC_ENV                : OIC URL (i.e.  https://<host_name>.us.oracle.com:7004)
-# - OIC_USER               : OIC User
-# - OIC_USER_PWD           : OIC User Password
+# - ICS_ENV                : OIC URL (i.e.  https://<host_name>.us.oracle.com:7004)
+# - ICS_USER               : OIC User
+# - ICS_USER_PWD           : OIC User Password
 # - LOCAL_REPO             : Local Repository location (i.e.  /scratch/GitHub/mytest1 )
 # - EXPORT_ALL             : Option for Exporting all Integrations (true/flase)
 # - CONFIG_JSON            : Integration Config (config.json) absolute path
@@ -100,24 +101,24 @@ function log_result () {
     # Check for HTTP return code 
     if grep -q '200 OK' $check_file;then
         echo "[$(date +'%Y-%m-%d %H:%M:%S')]|$operation|$integration_name|$integration_version|Passed" 2>&1 |& tee -a $RESULT_OUTPUT
-    elif grep -q '204' $4;then
-        echo "[$(date +'%Y-%m-%d %H:%M:%S')]|$1|$2|$3|Failed (204 - No content)" 2>&1 |& tee -a $RESULT_OUTPUT
-    elif grep -q '400' $4;then
-        echo "[$(date +'%Y-%m-%d %H:%M:%S')]|$1|$2|$3|Failed (400 - Bad request error)" 2>&1 |& tee -a $RESULT_OUTPUT
-    elif grep -q '401' $4;then
-        echo "[$(date +'%Y-%m-%d %H:%M:%S')]|$1|$2|$3|Failed (401 - Unauthorized)" 2>&1 |& tee -a $RESULT_OUTPUT
-    elif grep -q '404 Not Found' $4;then
-        echo "[$(date +'%Y-%m-%d %H:%M:%S')]|$1|$2|$3|Failed (404 - Not Found)" 2>&1 |& tee -a $RESULT_OUTPUT
-    elif grep -q '409' $4;then
-        echo "[$(date +'%Y-%m-%d %H:%M:%S')]|$1|$2|$3|Failed (409 - Conflict error)" 2>&1 |& tee -a $RESULT_OUTPUT
-    elif grep -q '412' $4;then
-        echo "[$(date +'%Y-%m-%d %H:%M:%S')]|$1|$2|$3|Failed (412 - Precondition failed)" 2>&1 |& tee -a $RESULT_OUTPUT
-    elif grep -q '423' $4;then
-        echo "[$(date +'%Y-%m-%d %H:%M:%S')]|$1|$2|$3|Failed (423 - Integration Locked or PREBUILT type)" 2>&1 |& tee -a $RESULT_OUTPUT
-    elif grep -q '500' $4;then
-        echo "[$(date +'%Y-%m-%d %H:%M:%S')]|$1|$2|$3|Failed (500 - Server error)" 2>&1 |& tee -a $RESULT_OUTPUT
+    elif grep -q '204' $check_file;then
+        echo "[$(date +'%Y-%m-%d %H:%M:%S')]|$operation|$integration_name|$integration_version|Failed (204 - No content)" 2>&1 |& tee -a $RESULT_OUTPUT
+    elif grep -q '400' $check_file;then
+        echo "[$(date +'%Y-%m-%d %H:%M:%S')]|$operation|$integration_name|$integration_version|Failed (400 - Bad request error)" 2>&1 |& tee -a $RESULT_OUTPUT
+    elif grep -q '401' $check_file;then
+        echo "[$(date +'%Y-%m-%d %H:%M:%S')]|$operation|$integration_name|$integration_version|Failed (401 - Unauthorized)" 2>&1 |& tee -a $RESULT_OUTPUT
+    elif grep -q '404 Not Found' $check_file;then
+        echo "[$(date +'%Y-%m-%d %H:%M:%S')]|$operation|$integration_name|$integration_version|Failed (404 - Not Found)" 2>&1 |& tee -a $RESULT_OUTPUT
+    elif grep -q '409' $check_file;then
+        echo "[$(date +'%Y-%m-%d %H:%M:%S')]|$operation|$integration_name|$integration_version|Failed (409 - Conflict error)" 2>&1 |& tee -a $RESULT_OUTPUT
+    elif grep -q '412' $check_file;then
+        echo "[$(date +'%Y-%m-%d %H:%M:%S')]|$operation|$integration_name|$integration_version|Failed (412 - Precondition failed)" 2>&1 |& tee -a $RESULT_OUTPUT
+    elif grep -q '423' $check_file;then
+        echo "[$(date +'%Y-%m-%d %H:%M:%S')]|$operation|$integration_name|$integration_version|Failed (423 - Integration Locked or PREBUILT type)" 2>&1 |& tee -a $RESULT_OUTPUT
+    elif grep -q '500' $check_file;then
+        echo "[$(date +'%Y-%m-%d %H:%M:%S')]|$operation|$integration_name|$integration_version|Failed (500 - Server error)" 2>&1 |& tee -a $RESULT_OUTPUT
     else
-        echo "[$(date +'%Y-%m-%d %H:%M:%S')]|$1|$2|$3|Failed" 2>&1 |& tee -a $RESULT_OUTPUT
+        echo "[$(date +'%Y-%m-%d %H:%M:%S')]|$operation|$integration_name|$integration_version|Failed" 2>&1 |& tee -a $RESULT_OUTPUT
     fi
 }
 
@@ -283,29 +284,41 @@ function execute_integration_cloud_api () {
     elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V1" ] && [ $api_operation == "IMPORT_NEW_INTEGRATION" ]
     then
         TYPE_REQUEST="POST"
-        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/import -H Accept:application/json -F type=application/octet-stream -F file=@$IAR_LOC/$IntegrationIAR 2>&1 | tee curl_output
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/import -H Accept:application/json -F type=application/octet-stream -F file=@$IAR_LOC/$INTEGRATION_IAR 2>&1 | tee curl_output
     elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V2" ] && [ $api_operation == "IMPORT_NEW_INTEGRATION" ]
     then
         TYPE_REQUEST="POST"
-        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/archive -H Accept:application/json -F type=application/octet-stream -F file=@$IAR_LOC/$IntegrationIAR 2>&1 | tee curl_output
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/archive -H Accept:application/json -F type=application/octet-stream -F file=@$IAR_LOC/$INTEGRATION_IAR 2>&1 | tee curl_output
     elif [ $INTEGRATION_CLOUD_VERSION == "OIC_V1" ] && [ $api_operation == "IMPORT_NEW_INTEGRATION" ]
     then
         TYPE_REQUEST="POST"
-        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/archive -H Accept:application/json -F type=application/octet-stream -F file=@$IAR_LOC/$IntegrationIAR 2>&1 | tee curl_output
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/archive -H Accept:application/json -F type=application/octet-stream -F file=@$IAR_LOC/$INTEGRATION_IAR 2>&1 | tee curl_output
     elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V1" ] && [ $api_operation == "IMPORT_EXISTING_INTEGRATION" ]
     then
         TYPE_REQUEST="PUT"
-        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/import -H Accept:application/json -F type=application/octet-stream -F file=@$IAR_LOC/$IntegrationIAR 2>&1 | tee curl_output
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/import -H Accept:application/json -F type=application/octet-stream -F file=@$IAR_LOC/$INTEGRATION_IAR 2>&1 | tee curl_output
     elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V2" ] && [ $api_operation == "IMPORT_EXISTING_INTEGRATION" ]
     then
         TYPE_REQUEST="PUT"
-        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/archive -H Accept:application/json -F type=application/octet-stream -F file=@$IAR_LOC/$IntegrationIAR 2>&1 | tee curl_output
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/archive -H Accept:application/json -F type=application/octet-stream -F file=@$IAR_LOC/$INTEGRATION_IAR 2>&1 | tee curl_output
     elif [ $INTEGRATION_CLOUD_VERSION == "OIC_V1" ] && [ $api_operation == "IMPORT_EXISTING_INTEGRATION" ]
     then
         TYPE_REQUEST="PUT"
-        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/archive -HAccept:application/json -Ftype=application/octet-stream -Ffile=@$IAR_LOC/$IntegrationIAR 2>&1 | tee curl_output
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/archive -HAccept:application/json -Ftype=application/octet-stream -Ffile=@$IAR_LOC/$INTEGRATION_IAR 2>&1 | tee curl_output
+    elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V1" ] && [ $api_operation == "UPDATE_CONNECTION" ]
+    then
+        TYPE_REQUEST="POST"
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}connections/${CONN_ID} -H Content-Type:application\/json -d ${INTEGRATION_CONFIG}/${CONN_ID}.json 2>&1 | tee curl_output
+    elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V2" ] && [ $api_operation == "UPDATE_CONNECTION" ]
+    then
+        TYPE_REQUEST="POST"
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}connections/${CONN_ID} -H Content-Type:application\/json -H X-HTTP-Method-Override:PATCH -d ${INTEGRATION_CONFIG}/${CONN_ID}.json 2>&1 | tee curl_output
+    elif [ $INTEGRATION_CLOUD_VERSION == "OIC_V1" ] && [ $api_operation == "UPDATE_CONNECTION" ]
+    then
+        TYPE_REQUEST="POST"
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}connections/${CONN_ID} -H Content-Type:application\/json -H X-HTTP-Method-Override:PATCH -d ${INTEGRATION_CONFIG}/${CONN_ID}.json 2>&1 | tee curl_output
     else
-        echo "[ERROR] Specified Invalid version of Oracle Integration Cloud. Supported values are ICS_V1 | ICS_V2 | OIC"
+        echo "[ERROR] Specified Invalid version of Oracle Integration Cloud. Supported values are ICS_V1 | ICS_V2 | OIC_V1"
         exit 1
     fi
 }
@@ -407,7 +420,7 @@ function exporting_integrations () {
             log "INTEGRATION ID:    $INTEGRATION_ID"
             log "INTEGRATION VER:   $INTEGRATION_VERSION"
             log "******************************************************************************************"
-            log "Check if Integration Exists"
+            log "Check if Integration Exists..."
             log "******************************************************************************************"
             # first, call to check if the Integration exists
             log "*** Running Curl command to RETRIEVE_INTEGRATION..."
@@ -482,7 +495,7 @@ echo "CONFIG_JSON:          $CONFIG_JSON"
 echo "******************************************************************************************" 
 
 ##Cleanup
-#log "Cleaning results output from last execution..."
+log "Cleaning up result output from last execution..."
 rm $RESULT_OUTPUT
 log "Cleaning HTML report from last execution..."
 rm $CI_REPORT
@@ -512,7 +525,7 @@ else
     if [ -s $CONFIG_JSON ]; then
         log "config.json file:  $CONFIG_JSON"
     else
-        log  "[ERROR] Configuration file ${CONFIG_JSON} does not exists!"
+        log  "[ERROR] Configuration file ${CONFIG_JSON} does not exist!"
         exit 1
     fi
 fi
@@ -531,7 +544,7 @@ log "Total Integrations:    $rec_num"
 log "Total Passed:          $total_passed"
 log "Total Failed:          $total_failed"
 
-log 'Cleaning up...'
+log "Cleaning up..."
 rm  curl_output $LOG_DIR/curl_response.out
 rm -rf out
 rm $RESULT_OUTPUT

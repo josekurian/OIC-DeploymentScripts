@@ -6,17 +6,19 @@
 #
 # Oracle 
 # Created by:  Richard Poon
+# Modified by: Samuel Castro
 # Created:     6/13/2019
 # Updated:     9/20/2019
+# Updated date: 9/20/2019
 # 
 # Mandatory parameters:
-# - OIC_ENV                     : OIC URL (i.e.  https://myoicenva.integration.ocp.oraclecloud.com/ic/home)
-# - OIC_USER                    : OIC User
-# - OIC_PASSWORD                : OIC User Password
-# - OVERWRITE (Optional)        : Overwrite flag - if set will overwrite Integration while Import
-# - IMPORT_ONLY                 : If true, it will import the integration without the connections and will leave it deactivated. If false, it will import both the integration and the connections and leave it activated.
-# - INTEGRATION_CONFIG          : integrations.json location, this file contains the integrations to deploy
-# - IAR_LOCATION (Mandatory)    : IAR location
+# - ICS_ENV                         : OIC URL (i.e.  https://myoicenva.integration.ocp.oraclecloud.com/ic/home)
+# - ICS_USER                        : OIC User
+# - ICS_USER_PWD                    : OIC User Password
+# - OVERWRITE (Optional)            : Overwrite flag - if set will overwrite Integration while Import
+# - IMPORT_ONLY (Optional)          : If true, it will import the integration without the connections and will leave it deactivated. If false, it will import both the integration and the connections and leave it activated.
+# - INTEGRATION_CONFIG (Optional)   : integrations.json location, this file contains the integrations to deploy
+# - IAR_LOC (Mandatory)             : IARS location
 # 
 # Disclaimer:
 #
@@ -29,66 +31,66 @@
 # that results from the download of any such material.
 #
 # ****************************************************************************************************
+#######################################################################################
+# ARGUMENTS AND SETUP SECTION
+#######################################################################################
+## jq Absolute Path
 jq=/c/Oracle/Code/OIC/jq-win64.exe
-NUM_ARG=$#
 
+##Verbose Mode flag
+VERBOSE=false
+
+##Support for different versions of the Oracle Integration APIs
+##Currently added support for OIC_V1, ICS_V1 and ICS_V2
+INTEGRATION_CLOUD_VERSION="ICS_V1" #Default Version
+if [ $INTEGRATION_CLOUD_VERSION == "ICS_V1" ]
+then
+    INTEGRATION_REST_API="/icsapis/v1/"
+elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V2" ]
+then
+    INTEGRATION_REST_API="/icsapis/v2/"
+elif [ $INTEGRATION_CLOUD_VERSION == "OIC_V1" ]
+then
+    INTEGRATION_REST_API="/ic/api/integration/v1/"
+else
+    echo "[ERROR] Specified Invalid version of Oracle Integration Cloud. Supported values are ICS_V1 | ICS_V2 | OIC_V1"
+    exit 1
+fi
+
+##Arguments validation
+NUM_ARG=$#
 if [[ $NUM_ARG -lt 3 ]]
 then
-	echo "[ERROR] Missing mandatory arguments: "`basename "$0"`" <OIC_ENV> <OIC_USER> <OIC_USER_PWD> <OVERWRITE - optional> <IMPORT_ONLY - optional> <INTEGRATION_CONFIG_LOCATION - optional> <IARS_LOCATION - optional>"
+	echo "[ERROR] Missing mandatory arguments: "`basename "$0"`" <ICS_ENV> <ICS_USER> <ICS_USER_PWD> <OVERWRITE - optional> <IMPORT_ONLY - optional> <INTEGRATION_CONFIG - optional> <IAR_LOC - optional>"
 	exit 0
 fi
 
+##Default variables
 CURRENT_DIR=$(pwd)
-
 LOG_DIR=$CURRENT_DIR/log
+INTEGRATION_CONFIG_FILE=$CURRENT_DIR/config/integrations.json
+IAR_DEFAULT_LOCATION=$CURRENT_DIR/archive
 ERROR_FILE=$LOG_DIR/archive_error.log
+RESPONSE_FILE=$LOG_DIR/curl_response.out
 RESULT_OUTPUT=deploy_integrations.out
 CD_REPORT=$CURRENT_DIR/cdout.html
-
 rec_num=0
 total_passed=0
 total_failed=0
 total_skipped=0
 
+##Default values for arguments
 ICS_ENV=${1}
 ICS_USER=${2}
 ICS_USER_PWD=${3}
-OVERRIDE=${4:-false}
+OVERWRITE=${4:-false}
 IMPORT_ONLY=${5:-false}
-INTEGRATION_CONFIG=${6}
-IAR_LOC=${7}
+INTEGRATION_CONFIG=${6:-$INTEGRATION_CONFIG_FILE}
+IAR_LOC=${7:-$IAR_DEFAULT_LOCATION}
 
-
-echo "ICS_ENV: $ICS_ENV"
-echo "ICS_USER:  $ICS_USER"
-echo "ICS_USER_PWD: $ICS_USER_PWD"
-echo "OVERRIDE: $OVERRIDE"
-echo "IMPORT_ONLY: $IMPORT_ONLY"
-echo "INTEGRATION_CONFIG: $INTEGRATION_CONFIG"
-echo "IAR_LOC: $IAR_LOC"
-
-###############################
-
-VERBOSE=false
-IMPORT_INTEGRATION=true
-INTEGRATION_REST_API="/ic/api/integration/v1"
-GREP_CMD="grep -q "
-TYPE_REQUEST="GET"
-CURL_CMD="curl -k -v -X $TYPE_REQUEST -u $ICS_USER:$ICS_USER_PWD"
-
-#######################################
-## Re-building OIC URL from User input
-#######################################
-tempstr=$ICS_ENV
-echo $tempstr
-STR1=$(echo $tempstr | cut -d'/' -f 1)
-STR2=$(echo $tempstr | cut -d'/' -f 3)
-ICS_ENV=$(echo ${STR1}\/\/${STR2})
-echo "FINAL OIC URL = $ICS_ENV"
-
-###############################################
+#######################################################################################
 # DEFINED FUNCTIONS
-###############################################
+#######################################################################################
 
 function log () {
    message=$1
@@ -140,10 +142,6 @@ function cdout_to_html () {
     failed=$4
     skipped=$5
 
-    echo "total integrations: $total_num"
-    echo "pass: $passed"
-    echo "failed: $failed"
-
     echo "<html>" >> $html
     echo "  <style>
             table {
@@ -184,7 +182,6 @@ function cdout_to_html () {
     while IFS='|' read -ra line ; do
         echo "<tr>" >> $html
         for i in "${line[@]}"; do
-           echo "<td>$i</td>"
            if echo $i| grep -iqF Pass; then
                 echo " <td><font color="blue">$i</font></td>" >> $html
            elif echo $i | grep -iqF Fail; then
@@ -195,7 +192,6 @@ function cdout_to_html () {
                 echo " <td>$i</td>" >> $html
            fi
           done
-         echo "</tr>"
          echo "</tr>" >> $html
     done < $input_file
 
@@ -228,262 +224,349 @@ function cdout_to_html () {
 }
 
 function execute_integration_cloud_api () {
+    TYPE_REQUEST="GET" #GET, PIT, POST
+    CURL_CMD="curl -k -v -X $TYPE_REQUEST -u $ICS_USER:$ICS_USER_PWD"
+    CURL_CMD="${CURL_CMD} -s " # Make CURL command silent by default
     api_operation=$1
     if [ $INTEGRATION_CLOUD_VERSION == "ICS_V1" ] && [ $api_operation == "RETRIEVE_CONNECTION" ]
     then
+        TYPE_REQUEST="GET"
         $CURL_CMD -HAccept:application\/json ${ICS_ENV}${INTEGRATION_REST_API}connections/$conn_id -o $connection_json 2>&1 | tee curl_output
     elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V2" ] && [ $api_operation == "RETRIEVE_CONNECTION" ]
     then
+        TYPE_REQUEST="GET"
         $CURL_CMD -HAccept:application\/json ${ICS_ENV}${INTEGRATION_REST_API}connections/$conn_id -o $connection_json 2>&1 | tee curl_output
-    elif [ $INTEGRATION_CLOUD_VERSION == "OIC" ] && [ $api_operation == "RETRIEVE_CONNECTION" ]
+    elif [ $INTEGRATION_CLOUD_VERSION == "OIC_V1" ] && [ $api_operation == "RETRIEVE_CONNECTION" ]
     then
+        TYPE_REQUEST="GET"
         $CURL_CMD -HAccept:application\/json ${ICS_ENV}${INTEGRATION_REST_API}connections/$conn_id -o $connection_json 2>&1 | tee curl_output
     elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V1" ] && [ $api_operation == "RETRIEVE_INTEGRATION" ]
     then
+        TYPE_REQUEST="GET"
         $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/$INTEGRATION_ID/$INTEGRATION_VERSION/ -HAccept:application\/json -o $RESPONSE_FILE 2>&1 | tee curl_output
     elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V2" ] && [ $api_operation == "RETRIEVE_INTEGRATION" ]
     then
+        TYPE_REQUEST="GET"
         $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/$INTEGRATION_ID\|$INTEGRATION_VERSION/ -HAccept:application\/json -o $RESPONSE_FILE 2>&1 | tee curl_output
-    elif [ $INTEGRATION_CLOUD_VERSION == "OIC" ] && [ $api_operation == "RETRIEVE_INTEGRATION" ]
+    elif [ $INTEGRATION_CLOUD_VERSION == "OIC_V1" ] && [ $api_operation == "RETRIEVE_INTEGRATION" ]
     then
+        TYPE_REQUEST="GET"
         $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/$INTEGRATION_ID\|$INTEGRATION_VERSION/ -HAccept:application\/json -o $RESPONSE_FILE 2>&1 | tee curl_output
+    elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V1" ] && [ $api_operation == "RETRIEVE_ALL_INTEGRATIONS" ]
+    then
+        TYPE_REQUEST="GET"
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations -HAccept:application\/json -o $RESPONSE_FILE 2>&1 | tee curl_output
+    elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V2" ] && [ $api_operation == "RETRIEVE_ALL_INTEGRATIONS" ]
+    then
+        TYPE_REQUEST="GET"
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations -HAccept:application\/json -o $RESPONSE_FILE 2>&1 | tee curl_output
+    elif [ $INTEGRATION_CLOUD_VERSION == "OIC_V1" ] && [ $api_operation == "RETRIEVE_ALL_INTEGRATIONS" ]
+    then
+        TYPE_REQUEST="GET"
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations -HAccept:application\/json -o $RESPONSE_FILE 2>&1 | tee curl_output
     elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V1" ] && [ $api_operation == "EXPORT_INTEGRATION" ]
     then
+        TYPE_REQUEST="GET"
         $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/$INTEGRATION_ID/$INTEGRATION_VERSION/export -o $IAR_FILE 2>&1 | tee curl_output
     elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V2" ] && [ $api_operation == "EXPORT_INTEGRATION" ]
     then
+        TYPE_REQUEST="GET"
         $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/$INTEGRATION_ID/versions/$INTEGRATION_VERSION/archive -o $IAR_FILE 2>&1 | tee curl_output
-    elif [ $INTEGRATION_CLOUD_VERSION == "OIC" ] && [ $api_operation == "EXPORT_INTEGRATION" ]
+    elif [ $INTEGRATION_CLOUD_VERSION == "OIC_V1" ] && [ $api_operation == "EXPORT_INTEGRATION" ]
     then
+        TYPE_REQUEST="GET"
         $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/$INTEGRATION_ID\|$INTEGRATION_VERSION/archive -o $IAR_FILE 2>&1 | tee curl_output
+    elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V1" ] && [ $api_operation == "DEACTIVATE_INTEGRATION" ]
+    then
+        TYPE_REQUEST="POST"
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/$INTEGRATION_ID/$INTEGRATION_VERSION/deactivate -H Content-Type:application\/json
+    elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V2" ] && [ $api_operation == "DEACTIVATE_INTEGRATION" ]
+    then
+        TYPE_REQUEST="POST"
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/$INTEGRATION_ID/versions/$INTEGRATION_VERSION/status -H Content-Type:application\/json -H X-HTTP-Method-Override:PATCH -d '{"status":"CONFIGURED"}'
+    elif [ $INTEGRATION_CLOUD_VERSION == "OIC_V1" ] && [ $api_operation == "DEACTIVATE_INTEGRATION" ]
+    then
+        TYPE_REQUEST="POST"
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/$INTEGRATION_ID\|$INTEGRATION_VERSION -H Content-Type:application\/json -H X-HTTP-Method-Override:PATCH -d '{"status":"CONFIGURED"}'
+    elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V1" ] && [ $api_operation == "ACTIVATE_INTEGRATION" ]
+    then
+        TYPE_REQUEST="POST"
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/$INTEGRATION_ID/$INTEGRATION_VERSION/activate -H Content-Type:application\/json
+    elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V2" ] && [ $api_operation == "ACTIVATE_INTEGRATION" ]
+    then
+        TYPE_REQUEST="POST"
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/$INTEGRATION_ID/versions/$INTEGRATION_VERSION/status -H Content-Type:application\/json -H X-HTTP-Method-Override:PATCH -d '{"status":"ACTIVATED"}'
+        
+    elif [ $INTEGRATION_CLOUD_VERSION == "OIC_V1" ] && [ $api_operation == "ACTIVATE_INTEGRATION" ]
+    then
+        TYPE_REQUEST="POST"
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/$INTEGRATION_ID\|$INTEGRATION_VERSION -H Content-Type:application\/json -H X-HTTP-Method-Override:PATCH -d '{"status":"ACTIVATED"}'
+        
+    elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V1" ] && [ $api_operation == "IMPORT_NEW_INTEGRATION" ]
+    then
+        TYPE_REQUEST="POST"
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/import -H Accept:application/json -F type=application/octet-stream -F file=@$IAR_LOC/$INTEGRATION_IAR 2>&1 | tee curl_output
+    elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V2" ] && [ $api_operation == "IMPORT_NEW_INTEGRATION" ]
+    then
+        TYPE_REQUEST="POST"
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/archive -H Accept:application/json -F type=application/octet-stream -F file=@$IAR_LOC/$INTEGRATION_IAR 2>&1 | tee curl_output
+    elif [ $INTEGRATION_CLOUD_VERSION == "OIC_V1" ] && [ $api_operation == "IMPORT_NEW_INTEGRATION" ]
+    then
+        TYPE_REQUEST="POST"
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/archive -H Accept:application/json -F type=application/octet-stream -F file=@$IAR_LOC/$INTEGRATION_IAR 2>&1 | tee curl_output
+    elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V1" ] && [ $api_operation == "IMPORT_EXISTING_INTEGRATION" ]
+    then
+        TYPE_REQUEST="PUT"
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/import -H Accept:application/json -F type=application/octet-stream -F file=@$IAR_LOC/$INTEGRATION_IAR 2>&1 | tee curl_output
+    elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V2" ] && [ $api_operation == "IMPORT_EXISTING_INTEGRATION" ]
+    then
+        TYPE_REQUEST="PUT"
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/archive -H Accept:application/json -F type=application/octet-stream -F file=@$IAR_LOC/$INTEGRATION_IAR 2>&1 | tee curl_output
+    elif [ $INTEGRATION_CLOUD_VERSION == "OIC_V1" ] && [ $api_operation == "IMPORT_EXISTING_INTEGRATION" ]
+    then
+        TYPE_REQUEST="PUT"
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}integrations/archive -HAccept:application/json -Ftype=application/octet-stream -Ffile=@$IAR_LOC/$INTEGRATION_IAR 2>&1 | tee curl_output
+    elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V1" ] && [ $api_operation == "UPDATE_CONNECTION" ]
+    then
+        TYPE_REQUEST="POST"
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}connections/${CONN_ID} -H Content-Type:application\/json -d ${INTEGRATION_CONFIG}/${CONN_ID}.json 2>&1 | tee curl_output
+    elif [ $INTEGRATION_CLOUD_VERSION == "ICS_V2" ] && [ $api_operation == "UPDATE_CONNECTION" ]
+    then
+        TYPE_REQUEST="POST"
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}connections/${CONN_ID} -H Content-Type:application\/json -H X-HTTP-Method-Override:PATCH -d ${INTEGRATION_CONFIG}/${CONN_ID}.json 2>&1 | tee curl_output
+    elif [ $INTEGRATION_CLOUD_VERSION == "OIC_V1" ] && [ $api_operation == "UPDATE_CONNECTION" ]
+    then
+        TYPE_REQUEST="POST"
+        $CURL_CMD ${ICS_ENV}${INTEGRATION_REST_API}connections/${CONN_ID} -H Content-Type:application\/json -H X-HTTP-Method-Override:PATCH -d ${INTEGRATION_CONFIG}/${CONN_ID}.json 2>&1 | tee curl_output
     else
-        echo "[ERROR] Specified Invalid version of Oracle Integration Cloud. Supported values are ICS_V1 | ICS_V2 | OIC"
+        echo "[ERROR] Specified Invalid version of Oracle Integration Cloud. Supported values are ICS_V1 | ICS_V2 | OIC_V1"
         exit 1
     fi
 }
 
-###############################################
-#    MAIN
-###############################################
+#######################################################################################
+# MAIN SECTION
+#######################################################################################
 
 if [ $VERBOSE = true ]
  then
-     echo "********************************"
-     echo "********************************"
-     echo "***  VERBOSE mode activated  ***"
-     echo "********************************"
-     echo "********************************"
-     echo ""
-     echo ""
+     echo "********************************" 
+     echo "***  VERBOSE mode activated  ***" 
+     echo "********************************" 
      set -vx
 fi
 
-echo "******************************"
-echo "* Parameters:                *"
-echo "******************************"
-echo "ICS_ENV: $ICS_ENV"
-echo "ICS_USER: $ICS_USER"
-echo "ICS_USER_PWD: ************"
-echo "******************************"
+echo "******************************************************************************************" 
+echo "* Parameters:                                                                            *" 
+echo "******************************************************************************************"
+echo "ICS_ENV:              $ICS_ENV" 
+echo "ICS_USER:             $ICS_USER" 
+echo "ICS_USER_PWD:         ************" 
+echo "OVERWRITE:            $OVERWRITE"
+echo "IMPORT_ONLY:          $IMPORT_ONLY"
+echo "INTEGRATION_CONFIG:   $INTEGRATION_CONFIG"
+echo "IAR_LOC:              $IAR_LOC"
+echo "******************************************************************************************" 
 
+##Cleanup
+log "Cleaning up result output from last execution..."
+rm $RESULT_OUTPUT
+log "Cleaning HTML report from last execution..."
+rm $CD_REPORT
+log "Cleaning log and archive directories..."
+rm -Rf $LOG_DIR
 mkdir -p $LOG_DIR
-rm -f $LOG_DIR/*
 touch $ERROR_FILE
 
-if [ -f "$RESULT_OUTPUT" ]
-then
-   rm $RESULT_OUTPUT
+# Check if config file exists
+if [ -s $INTEGRATION_CONFIG ]; then
+    rec_num=$(${jq} '.integrations | length' $INTEGRATION_CONFIG)
+    log "total number of Integrations:   $rec_num"
+else
+    log " [ERROR] Configuration file $INTEGRATION_CONFIG does not exist!"
+    exit 1
 fi
 
-if [ -f "$CD_REPORT" ]
-then
-   echo "removing old Report HTML file .."
-   rm $CD_REPORT
-fi
+log "Determining number of Integrations from config file ..."
 
+#Get the total number of Integrations from config file
+Integr_count=$(${jq} '.integrations | length' $INTEGRATION_CONFIG )
+log "Number of Integrations =  $Integr_count"
 
-if [ $IMPORT_INTEGRATION = true ]
-   then
-        echo "INTEGRATION_CONFIG = " $INTEGRATION_CONFIG
-
-        # Check if config file exists
-        if [ -s $INTEGRATION_CONFIG ]; then
-            rec_num=$(${jq} '.integrations | length' $INTEGRATION_CONFIG)
-            log "total number of Integrations:   $rec_num"
-        else
-            log " ERROR >>>>>>>  Config file $INTEGRATION_CONFIG does not exist!"
-            exit 1
-        fi
-
-        echo "1) Determining number of Integrations from config file ..."
-
-        #Get the total number of Integrations from config file
-        Integr_count=$(${jq} '.integrations | length' $INTEGRATION_CONFIG )
-        log "Number of Integrations =  $Integr_count"
-
-        int_exists=false
-        int_activated=false
-        skip_deploy=false
-
-        for ((i=0; i < $Integr_count; i++))
-        do
-            All_Connections_Updated=true
-
-            #obtain the Integration Identifier and version information
-            IntegrationID=$( ${jq} -r '.integrations['$i'] | .code' $INTEGRATION_CONFIG )
-            IntegrationVer=$( ${jq} -r '.integrations['$i'] | .version' $INTEGRATION_CONFIG )
-
-            IntegrationIAR=${IntegrationID}_${IntegrationVer}.iar
-
-            echo "Integration IAR = " $IAR_LOC/$IntegrationIAR
-
-            #Check if IAR file exists
-            if [ -s $IAR_LOC/$IntegrationIAR ]
+int_exists=false
+int_activated=false
+skip_deploy=false
+for ((i=0; i < $Integr_count; i++))
+do
+    All_Connections_Updated=true
+    # Extract Integration information from JSON file
+    INTEGRATION_ID=$( ${jq} -r '.integrations['$i'] | .code' $INTEGRATION_CONFIG )
+    INTEGRATION_VERSION=$( ${jq} -r '.integrations['$i'] | .version' $INTEGRATION_CONFIG )
+    INTEGRATION_IAR=${INTEGRATION_ID}_${INTEGRATION_VERSION}.iar
+    log "******************************************************************************************"
+    log "INTEGRATION ID:    $INTEGRATION_ID"
+    log "INTEGRATION VER:   $INTEGRATION_VERSION"
+    log "INTEGRATION IAR:   $IAR_LOC/$INTEGRATION_IAR" 
+    log "******************************************************************************************"
+    log " Checking Integration IAR file..." 
+    log "******************************************************************************************"    
+    #Check if IAR file exists
+    if [ -s $IAR_LOC/$INTEGRATION_IAR ]
+    then
+        # Check if the Integration Exists and is currently Activated
+        log "Checking if Integration already exists and if it is Activated in POD..."
+        log "******************************************************************************************"
+        execute_integration_cloud_api "RETRIEVE_INTEGRATION"
+        if [ "$?" == "0" ]
+            int_status=$( cat curl_result | ${jq} -r .status )
+            if [ "$int_status" = "ACTIVATED" ]
             then
+                log "*** Integration ${INTEGRATION_ID}_${INTEGRATION_VERSION} exists and its Activated."
+                int_exists=true
+                int_activated=true
+            elif [ "$int_status" = "HTTP 404 Not Found" ]
+            then
+                log "*** Integration ${INTEGRATION_ID}_${INTEGRATION_VERSION} does NOT exist."
+                int_exists=false
+                int_activated=false
+            else
+                log "*** Integration ${INTEGRATION_ID}_${INTEGRATION_VERSION} exists but it is NOT Activated."
+                int_exists=true
+                int_activated=false
+            fi
 
-                # Check if the Integration Exists and is currently Activated
-                echo "Check if Integration already exists and is Activated in POD ...  "
+            # Check Integration exists - and OVERWRITE flag
+            if [ "$int_exists" = true ] && [ "$OVERWRITE" = false ]
+            then
+                    #skip deploying the Integration if exists and OVERWRITE=false
+                    skip_deploy=true
+                    log " *** [WARNING] The import will be skipped as the OVERWRITE Flag is false."
+                    log_result "Import Integration" ${INTEGRATION_ID} ${INTEGRATION_VERSION} "curl_output" ${skip_deploy}
+                    total_skipped=$((total_skipped+1))
+                    continue
 
-                curl -k -v -X GET -u $ICS_USER:$ICS_USER_PWD -H Accept:application/json $ICS_ENV$INTEGRATION_REST_API/integrations/$IntegrationID\|$IntegrationVer  -o curl_result 2>&1 | tee curl_output
-                int_status=$( cat curl_result | ${jq} -r .status ) 
+            # Integration exists and Activated - and to OVERWRITE
+            elif [ "$int_activated" = true ] && [ "$OVERWRITE" = true ]
+            then
+                log "*** Integration ${INTEGRATION_ID}_${INTEGRATION_VERSION} exists and is currently Activate. Deactivating Integration..."
+                execute_integration_cloud_api "DEACTIVATE_INTEGRATION"
 
-                if [ "$int_status" = "ACTIVATED" ]
+                log "*** Importing Integration $IAR_LOC/$INTEGRATION_IAR..."
+                execute_integration_cloud_api "IMPORT_EXISTING_INTEGRATION"
+
+            # Integration exists - and OVERWRITE=true 
+            elif [ "$int_exists" = true ] && [ "$OVERWRITE" = true ]
+            then
+                log "*** Importing Integration $IAR_LOC/$INTEGRATION_IAR..."
+                execute_integration_cloud_api "IMPORT_EXISTING_INTEGRATION"
+
+            # Integrations not exists
+            else
+                log "*** Integration ${INTEGRATION_ID}_${INTEGRATION_VERSION} does NOT exist on POD."
+                log "*** Importing Integration $IAR_LOC/$INTEGRATION_IAR..."
+                execute_integration_cloud_api "IMPORT_NEW_INTEGRATION"
+            fi
+
+            # Added condition to check if user want to import IAR only
+            if [ "$IMPORT_ONLY" = true  ] 
+            then
+                log_result "Import Integration" ${INTEGRATION_ID} ${INTEGRATION_VERSION} "curl_output"
+                log "*** [WARNING] Import Only is set to true. The Integration will not be activated and its associated connections will not be imported."
+                continue
+            fi
+
+            # UPDATING the CONNECTIONS
+            log "******************************************************************************************"
+            log "Determining the number of Connections for the Integration..."
+            log "******************************************************************************************"
+            Conn_count=$(${jq} '.integrations['$i'] | .connections | length' $INTEGRATION_CONFIG )
+            log "*** Connection Count: $Conn_count"
+            for (( j=0; j < $Conn_count; j++ ))
+            do
+                # Extract the Connection Identifier from json config file
+                CONN_ID=$( ${jq} -r '.integrations['$i'] | .connections['$j'] | .code' $INTEGRATION_CONFIG )
+                log "*** Updating Connection $CONN_ID..."
+                execute_integration_cloud_api "UPDATE_CONNECTION"
+                if [ "$?" == "0" ]
                 then
-                    echo "Integration  ${IntegrationID}_${IntegrationVer}  exists and Activated .."
-                    int_exists=true
-                    int_activated=true
-                elif [ "$int_status" = "HTTP 404 Not Found" ]
-                then
-                    echo "Integration ${IntegrationID}_${IntegrationVer}  does NOT exists .. "
-                    int_exists=false
-                    int_activated=false
+                    log " *** Successfully updated connection $CONN_ID!"
                 else
-                    echo "Integration ${IntegrationID}_${IntegrationVer}  exists but NOTE Activated .. "
-                    int_exists=true
-                    int_activated=false
-                fi
-
-                # Check Integration exists - and Override flag
-                if [ "$int_exists" = true ] && [ "$OVERRIDE" = false ]
-                then
-                     #skip deploying the Integration if exists and Override=false
-                     skip_deploy=true
-                     log " +++++++++++ Integration exists on POD and OVERRIDE flag = false  .. skip deploying Integration ${IntegrationID}_${IntegrationVer} ...! "
-                     log_result "Import Integration" ${IntegrationID} ${IntegrationVer} "curl_output" ${skip_deploy}
-		             total_skipped=$((total_skipped+1))
-                     continue
-
-                # Integration exists and Activated - and to Override
-                elif [ "$int_activated" = true ] && [ "$OVERRIDE" = true ]
-                then
-                    log " Integration ${IntegrationID}_${IntegrationVer} exists and is currently Activate.  De-Activating Integration ...  "
-                    curl -k -v -X POST -u $ICS_USER:$ICS_USER_PWD -H Content-Type:application/json -H X-HTTP-Method-Override:PATCH -d '{"status":"CONFIGURED"}' $ICS_ENV$INTEGRATION_REST_API/integrations/${IntegrationID}%7c${IntegrationVer}
-
-                    log "1) Importing Integration using $IntegrationIAR "
-                    curl -k -v -X PUT -u $ICS_USER:$ICS_USER_PWD -HAccept:application/json -Ftype=application/octet-stream -Ffile=@$IAR_LOC/$IntegrationIAR $ICS_ENV$INTEGRATION_REST_API/integrations/archive 2>&1 | tee curl_output
-
-                # Integration exists - and Override=true 
-                elif [ "$int_exists" = true ] && [ "$OVERRIDE" = true ]
-                then
-                    log "1) Importing Integration using $IntegrationIAR"
-                    curl -k -v -X PUT -u $ICS_USER:$ICS_USER_PWD -HAccept:application/json -Ftype=application/octet-stream -Ffile=@$IAR_LOC/$IntegrationIAR $ICS_ENV$INTEGRATION_REST_API/integrations/archive 2>&1 | tee curl_output
-
-                # Integrations not exists
-                else
-                    log " +++++++++++ Integration does NOT exists on POD. Importing Integration with ${IntegrationID}_${IntegrationVer}.iar "
-                    curl -k -v -X POST -u $ICS_USER:$ICS_USER_PWD -HAccept:application/json -Ftype=application/octet-stream -Ffile=@$IAR_LOC/$IntegrationIAR $ICS_ENV$INTEGRATION_REST_API/integrations/archive 2>&1 | tee curl_output
-                fi
-
-                # Added condition to check if user want to import IAR only
-                if [ "$IMPORT_ONLY" = true  ] 
-                then
-                    log_result "Import Integration" ${IntegrationID} ${IntegrationVer} "curl_output"
-                    echo "Import Only is set to true .."
+                    log "*** [ERROR] FAILED to update Connection $CONN_ID for Integration $INTEGRATION_IAR!"
+                    log "*** [ERROR] FAILED to update Connection $CONN_ID for Integration $INTEGRATION_IAR!"
+                    log_result "Update Connection" ${CONN_ID} "" "curl_output"
+                    All_Connections_Updated=false
                     continue
                 fi
+            done
 
-                # UPDATING the CONNECTIONS
-                echo "2) Determine number of Connections for the Integration .."
-                Conn_count=$(${jq} '.integrations['$i'] | .connections | length' $INTEGRATION_CONFIG )
-                echo "Connection Count = " $Conn_count
-
-                for (( j=0; j < $Conn_count; j++ ))
-                do
-                    # Extract the Connection Identifier from json config file
-                    ConnID=$( ${jq} -r '.integrations['$i'] | .connections['$j'] | .code' $INTEGRATION_CONFIG )
-
-                    echo "3) Updating Connection  " $ConnID
-                    curl -k -v -X POST -u $ICS_USER:$ICS_USER_PWD -HX-HTTP-Method-Override:PATCH -HContent-Type:application/json -d @${INTEGRATION_CONFIG}/${ConnID}.json $ICS_ENV$INTEGRATION_REST_API/connections/$ConnID 2>&1 | tee curl_output
-
-                    if [ "$?" == "0" ]
-                    then
-                        log " ** Connection $ConnID is Updated successfully !"
-                    else
-                        echo " ++++++ FAILED to update Connection $ConnID  for Integration  $IntegrationIAR! "
-                        log " ++++++ FAILED to update Connection $ConnID  for Integration  $IntegrationIAR ! "
-                        log_result "Update Connection" ${ConnID} "" "curl_output"
-                        All_Connections_Updated=false
-                        break
-                    fi
-                done
-
-                # ACTIVATING the INTEGRATIONS
-                if [ "$All_Connections_Updated" = true ]
-                then
-                    log "All Connections for $IntegrationIAR are updated successfully ..  Activating the Integration .."
-                    curl -k -v -X POST -u $ICS_USER:$ICS_USER_PWD -H Content-Type:application/json -H X-HTTP-Method-Override:PATCH -d '{"status":"ACTIVATED"}' $ICS_ENV$INTEGRATION_REST_API/integrations/${IntegrationID}%7c${IntegrationVer} 2>&1 | tee curl_output
-                    log_result "Activate Integration" ${IntegrationID} ${IntegrationVer} "curl_output"
-
+            # ACTIVATING the INTEGRATIONS
+            if [ "$All_Connections_Updated" = true ]
+            then
+                log "******************************************************************************************"
+                log "All Connections for $INTEGRATION_IAR are updated successfully"
+                log "******************************************************************************************"
+                log "Activating Integration..."
+                log "******************************************************************************************"
+                execute_integration_cloud_api "ACTIVATE_INTEGRATION"
+                log_result "Activate Integration" ${INTEGRATION_ID} ${INTEGRATION_VERSION} "curl_output"
+                if [ "$?" == "0" ]
                     if grep -q '200 OK' "curl_output";then
-                      total_passed=$((total_passed+1))
+                        total_passed=$((total_passed+1))
                     else
-                      total_failed=$((total_failed+1))
+                        total_failed=$((total_failed+1))
                     fi
                 else
-                    log " Not All Connections were Updated for $IntegrationIAR ..!"
-                    if [ -f "$curl_output"]; then
-                       rm $curl_output
-                    fi 
-
-                    #Create entry in the file to be used by Report
-                    echo "Not all Connection Updated" > $curl_output
-                    log_result "Activate Integration" ${IntegrationID} ${IntegrationVer} "curl_output"
                     total_failed=$((total_failed+1))
                 fi
-             else
-                log "+++++++++++++++ ERROR -  IAR  $IAR_LOC/$IntegrationIAR  file does NOT Exist!"
+            else
+                log "*** [WARNING] Not All Connections were Updated for $INTEGRATION_IAR ..!"
                 if [ -f "$curl_output"]; then
-                   rm $curl_output
+                    rm $curl_output
                 fi 
-                echo "IAR not exists" > $curl_output
-                log_result "Import Integration" ${IntegrationID} ${IntegrationVer} "curl_output"
+                #Create entry in the file to be used by Report
+                echo "Not all Connection Updated" > $curl_output
+                log_result "Activate Integration" ${INTEGRATION_ID} ${INTEGRATION_VERSION} "curl_output"
                 total_failed=$((total_failed+1))
             fi
-        done
-
-        # Converting output to HTML format
-        cdout_to_html $RESULT_OUTPUT $rec_num $total_passed $total_failed $total_skipped
-
-        echo "Total Integration:  $rec_num"
-        echo "Total Passed:  $total_passed"
-        echo "Total Failed:  $total_failed"
-        echo "Total Skipped: $total_skipped"
-
-
-        echo 'Cleaning up ..'
-        if [ -f "curl_result" ]
-        then
-           rm curl_result
+        else
+            log "[ERROR] IAR file $IAR_LOC/$INTEGRATION_IAR can't be retrieved from POD!"
+            if [ -f "$curl_output"]; then
+                rm $curl_output
+            fi 
+            echo "IAR not exists on POD" > $curl_output
+            log_result "Import Integration" ${INTEGRATION_ID} ${INTEGRATION_VERSION} "curl_output"
+            total_failed=$((total_failed+1))
         fi
+    else
+        log "[ERROR] IAR file $IAR_LOC/$INTEGRATION_IAR does NOT exist!"
+        if [ -f "$curl_output"]; then
+            rm $curl_output
+        fi 
+        echo "IAR not exists" > $curl_output
+        log_result "Import Integration" ${INTEGRATION_ID} ${INTEGRATION_VERSION} "curl_output"
+        total_failed=$((total_failed+1))
+    fi
+done
 
-        if [ -f "curl_output" ]
-        then
-           rm curl_output
-        fi
+# Converting output to HTML format
+log "Generating HTML report..."
+cdout_to_html $RESULT_OUTPUT $rec_num $total_passed $total_failed $total_skipped
 
-        if [ -f "$RESULT_OUTPUT" ]
-        then
-           rm $RESULT_OUTPUT
-        fi
+log "Total Integration: $rec_num"
+log "Total Passed:      $total_passed"
+log "Total Failed:      $total_failed"
+log "Total Skipped:     $total_skipped"
 
+log "Cleaning up..."
+if [ -f "curl_result" ]
+then
+    rm curl_result
+fi
+if [ -f "curl_output" ]
+then
+    rm curl_output
+fi
+if [ -f "$RESULT_OUTPUT" ]
+then
+    rm $RESULT_OUTPUT
 fi
